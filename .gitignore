@@ -1,0 +1,48 @@
+# Node modules
+node_modules/
+
+# Build outputs
+dist/
+.nuxt/
+.output/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.*.local
+
+# VS Code settings
+.vscode/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Optional lock files (chọn theo trình quản lý gói bạn dùng)
+package-lock.json
+pnpm-lock.yaml
+# yarn.lock   # (nếu bạn dùng yarn thì giữ lại)
+
+# OS & editor files
+.idea/
+*.swp
+*.swo
+*.bak
+
+# Nuxt Dev server cache
+.cache/
+
+# Bun
+.bun/
+
+# MacOS
+.AppleDouble
+.LSOverride
+
+# TypeScript build output
+*.tsbuildinfo

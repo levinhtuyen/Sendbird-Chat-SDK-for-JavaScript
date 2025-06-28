@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",                  // hỗ trợ module mới nhất
+    "module": "ESNext",                  // dùng ESM để phù hợp Vite
+    "moduleResolution": "Node",
+    "strict": true,                      // bật kiểm tra chặt chẽ (nên dùng)
+    "jsx": "preserve",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]                   // alias @ → src/
+    },
+    "skipLibCheck": true                 // tránh lỗi ở thư viện như sendbird/chat
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"],
+  "exclude": ["node_modules"]
+}
