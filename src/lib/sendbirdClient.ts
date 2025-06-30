@@ -3,6 +3,7 @@ import { GroupChannelModule,
   GroupChannelHandler,
   GroupChannel,
   GroupChannelCreateParams, } from '@sendbird/chat/groupChannel'
+import { UserMessage, UserMessageCreateParams } from '@sendbird/chat/message'
 import { ref } from 'vue'
 
 const sb = await SendbirdChat.init({
@@ -36,7 +37,24 @@ export async function createOrOpenChannel(currentUserId: string, otherUserIds: s
 // ✅ Gửi tin nhắn
 export async function sendMessage(text: string) {
   if (!currentChannel.value) throw new Error('Channel chưa mở')
-  return await currentChannel.value.sendUserMessage({ message: text })
+  const params: UserMessageCreateParams = {
+      message: text,
+  };
+
+   return await currentChannel.value.sendUserMessage(params)
+      .onPending((message: any) => {
+      // The pending message for the message being sent has been created.
+      // The pending message has the same reqId value as the corresponding failed/succeeded message.
+        console.log('Pending message:', message);
+      })
+      .onFailed((err: Error, message: any) => {
+      // Handle error.
+        console.log('err :>> ', err);
+      })
+      .onSucceeded((message) => {
+      // The message has been sent successfully.
+        console.log('Message sent successfully:', message);
+      });
 }
 
 // ✅ Lấy tin nhắn cũ
@@ -81,6 +99,7 @@ export function onMessage(callback: (text: string, sender: string) => void) {
 
 let messageCallback: (() => void) | null = null
 
+// ✅ Đăng ký callback khi có tin nhắn mới
 export function registerOnMessageCallback(cb: () => void) {
   messageCallback = cb
 
