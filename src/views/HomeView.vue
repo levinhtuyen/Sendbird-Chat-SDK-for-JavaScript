@@ -6,21 +6,22 @@
         <h2 class="text-xs font-bold text-gray-500 mb-2">Channel Chat</h2>
         <div
           v-for="user in users"
-          :key="user.id"
+          :key="user?.userId"
           class="flex items-center gap-3 cursor-pointer py- line-clamp-1 py-2"
-          :class="user.id === selectedUser?.id ? 'font-bold text-black' : 'text-gray-600'"
-          @click="selectUser(user)"
+          :class="user.userId === selectedUser?.userId ? 'font-bold text-black' : 'text-gray-600'"
+          @click="chooseUser(user)"
         >
           <div >
             <div
-              class="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-sm "
-              :class="user.bg"
+            :class="user.connectionStatus === 'online' ? 'bg-green-500' : 'bg-gray-400'"
+              class="w-8 h-8 rounded-full flex items-center bg-amber-500 justify-center text-white font-semibold text-sm "
+         
               >
-                {{ user.initial }}
-              </div>
+                {{ user.userId.slice(0,1) }}
+            </div>
           </div>
           <div class="line-clamp-1">
-            {{ user.name }}
+            {{ user.userId }}
           </div>
         </div>
       </div>
@@ -31,7 +32,7 @@
       <!-- Header -->
       <div class="flex justify-center p-4 ">
         <button class="bg-gray-100 text-lg font-bold px-4 py-1 rounded-full text-gray-600">
-          {{ selectedUser?.name || 'Select User' }}
+          {{ selectedUser?.userId || 'Select User' }}
         </button>
       </div>
 
@@ -40,40 +41,33 @@
         <div
           v-for="(msg, idx) in messages"
           :key="idx"
-          class="flex items-end"
-          :class="msg?.sender === selectedUser.name ? 'justify-end' : 'justify-start'"
+          class="flex items-end  gap-2"
+          :class=" msg?.sender === currentUser.userId ? 'justify-end' : 'justify-start'"
         >
           <!-- Avatar -->
+          <!-- Avatar (Right) -->
           <div
-            class="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-sm mr-2"
-            :class="getUser(msg?.sender).bg"
-            v-if="msg?.sender !== selectedUser.name"
+            v-if="msg.sender === 'unknown' || msg?.sender !== currentUser.userId"
+            class="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-sm ml-2"
+            :class="msg.sender === selectedUser.userId ? 'bg-amber-400' : 'bg-gray-400'"
           >
-            {{ getUser(msg?.sender).initial }}
+            {{ msg.sender !== 'unknown' ? 'You' :  msg.sender.slice(0, 1) }}
           </div>
-
           <!-- Message bubble -->
           <div
             class="max-w-sm px-4 py-2 rounded-xl shadow text-sm"
-            :class="msg?.sender === selectedUser.name
+            :class="msg?.sender === selectedUser.userId
               ? 'bg-gray-100 text-gray-900 rounded-br-none'
               : 'bg-white border rounded-bl-none'"
           >
             <p>{{ msg?.text }}</p>
           </div>
-
-          <!-- Avatar (Right) -->
-          <div
-            class="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-sm ml-2"
-            :class="getUser(msg.sender).bg"
-            v-if="msg.sender === selectedUser.name"
-          >
-            {{ getUser(msg.sender).initial }}
-          </div>
+          
         </div>
+        
         <div ref="bottomAnchor"></div> <!-- điểm cuộn tới -->
       </div>
-
+      
       <!-- Input -->
       <div class="p-4 w-full">
         <div class="w-full">
@@ -101,28 +95,34 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, onBeforeMount } from 'vue'
 import {
   connectSendbird,
   createOrOpenChannel,
   loadMessages,
   registerOnMessageCallback,
   sendMessage,
+  getAllApplicationUsers,
   onMessage,
+  initSendbird,
   } from '../lib/sendbirdClient'
   
-const users = ref([
-  { id: 'hotel1', name: 'Clark Kent', initial: 'C', bg: 'bg-cyan-500' },
-  { id: 'hotel2', name: 'John Stewart', initial: 'J', bg: 'bg-green-400' },
-  { id: 'hotel3', name: 'The Empire Strikes Chat', initial: 'T', bg: 'bg-fuchsia-600' },
-  { id: 'hotel4', name: 'Chat Royal', initial: 'C', bg: 'bg-orange-400' },
-  { id: 'hotel5', name: 'TextTok', initial: 'T', bg: 'bg-red-500' }
-])
-const currentUser = ref('user1')
-const selectedUser = ref({
-  id: 'hotel1', name: 'Clark Kent', initial: 'C', bg: 'bg-cyan-500'
+const users = ref<any>([])
+const currentUser = ref({
+  bg: "bg-gray-500",
+  userId: "User1",
+  initial: undefined,
+  nickname: "User1"
 })
 
+
+const selectedUser = ref()
+const  chooseUser = async (user:any) =>  {
+  selectedUser.value = user
+  await connect()
+  await openChannel()
+  scrollToBottom()
+}
 
 const message = ref('')
 const messages = ref<any[]>([])
@@ -131,18 +131,19 @@ const connected = ref(false)
 const channelReady = ref(false)
 const channelName = ref('')
 
-async function connect() {
+const connect = async() => {
   try {
-    await connectSendbird(selectedUser.value.name)
+    await connectSendbird(currentUser.value.userId)
     connected.value = true
   } catch (err) {
     console.error('❌ Kết nối thất bại:', err)
   }
 }
 
-async function openChannel() {
+const openChannel = async() => {
+  
   try {
-    const channelInfo = await createOrOpenChannel(currentUser.value, [selectedUser.value.name, currentUser.value])
+    const channelInfo = await createOrOpenChannel([ selectedUser.value.userId, currentUser.value.userId,])
     channelName.value = channelInfo.name
 
     const oldMsgs = await loadMessages()
@@ -150,37 +151,39 @@ async function openChannel() {
      messages.value = oldMsgs.reverse() 
 
     onMessage((text, sender) => {
-      messages.value.push({ text, sender,isHighlighted: sender !== currentUser.value  })
+      messages.value.push({ text, sender,isHighlighted: sender !== currentUser.value.nickname  })
     })
     channelReady.value = true
   } catch (err) {
-    console.error('❌ Mở channel lỗi:', err)
+    console.error(' Mở channel lỗi:', err)
   }
 }
-const  getUser = (id: any)=> {
-  return users.value.find(u => u.id === id) || { initial: '?', bg: 'bg-gray-400' }
-}
-const  selectUser = async (user:any) =>  {
-  selectedUser.value = user
-  await connect()
-  await openChannel()
-  scrollToBottom()
-}
 
-async function send() {
+
+const send = async() => {
   if (!message.value.trim()) return
   try {
     await sendMessage(message.value)
-    messages.value.push({ text: message.value, sender: selectedUser.value.name })
+    messages.value.push({ text: message.value, sender: currentUser.value.userId })
     message.value = ''
     scrollToBottom()
   } catch (err) {
-    console.error('❌ Gửi lỗi:', err)
+    console.error(' Gửi lỗi:', err)
   }
 }
-
+onBeforeMount(async () => {
+  initSendbird(currentUser.value.userId).then((sb) => {
+  console.log('Sendbird initialized with sb:', sb)
+}).catch((err) => {
+  console.error('Error initializing Sendbird:', err)
+})
+})
 onMounted(async() => {
+  let allUsers = await getAllApplicationUsers(currentUser.value.userId)
+  users.value = await allUsers.filter((user:any) => user.userId !== currentUser.value.userId)
   
+
+
   registerOnMessageCallback(async () => {
     console.log('📩 Nhận tin nhắn mới từ người khác')
     const oldMsgs = await loadMessages()
@@ -192,7 +195,7 @@ onMounted(async() => {
 })
 const bottomAnchor = ref<HTMLElement | null>(null)
 
-function scrollToBottom() {
+const scrollToBottom = () => {
   nextTick(() => {
     bottomAnchor.value?.scrollIntoView({ behavior: 'smooth' })
   })

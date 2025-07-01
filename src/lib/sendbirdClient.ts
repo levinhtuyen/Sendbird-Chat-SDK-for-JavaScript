@@ -6,26 +6,41 @@ import { GroupChannelModule,
 import { UserMessage, UserMessageCreateParams } from '@sendbird/chat/message'
 import { ref } from 'vue'
 
-const sb = await SendbirdChat.init({
-  appId: '133CC8F6-6ECE-459D-B738-04F6C8C8C59D',
+interface InviteUsersToChannelParams {
+  channel: GroupChannel;
+  userIds: string[];
+}
+
+let sb = await SendbirdChat.init({
+  appId: '1550DB5A-9A9C-47C8-A2BB-1EE2E80C75C4',
   modules: [new GroupChannelModule()],
 })
+export async function initSendbird(userId: string) {
+let sb = await SendbirdChat.init({
+  appId: '1550DB5A-9A9C-47C8-A2BB-1EE2E80C75C4',
+  modules: [new GroupChannelModule()],
+})
+
+  await sb.connect(userId)
+  return sb
+}
+
 const currentChannel = ref<GroupChannel | null>(null)
+let messageCallback: (() => void) | null = null
 
 // ✅ Kết nối người dùng
 export async function connectSendbird(userId: string) {
-   
   await sb.connect(userId)
 }
 
 // ✅ Tạo hoặc mở channel với người khác
-export async function createOrOpenChannel(currentUserId: string, otherUserIds: string[]) {
+export async function createOrOpenChannel(ConnectToUser: string[]) {
   const params: GroupChannelCreateParams = {
-    name: `Chat with ${otherUserIds.join(', ')}`,
-    invitedUserIds: [currentUserId, ...otherUserIds],
+    name: `Chat with ${ConnectToUser.join(', ')}`,
+    invitedUserIds: ConnectToUser,
     isDistinct: true,
   }
-
+console.log('params :>> ', params);
   currentChannel.value = await sb.groupChannel.createChannel(params)
 
   return {
@@ -97,7 +112,14 @@ export function onMessage(callback: (text: string, sender: string) => void) {
 
 }
 
-let messageCallback: (() => void) | null = null
+// ✅ Mời người dùng vào channel
+export const inviteUsersToChannel = async (
+  channel: InviteUsersToChannelParams['channel'],
+  userIds: InviteUsersToChannelParams['userIds']
+): Promise<void> => {
+  await channel.inviteWithUserIds(userIds);
+};
+
 
 // ✅ Đăng ký callback khi có tin nhắn mới
 export function registerOnMessageCallback(cb: () => void) {
@@ -112,4 +134,18 @@ export function registerOnMessageCallback(cb: () => void) {
 
   const handlerId = 'chat-callback-' + Math.random().toString(36).slice(2)
   sb.groupChannel.addGroupChannelHandler(handlerId, handler)
+}
+
+export const getAllApplicationUsers = async (id: string) => {
+  console.log('id :>> ', id);
+    await sb.connect(id)
+    try {
+        const userQuery = sb.createApplicationUserListQuery({ limit: 100 });
+        const users = await userQuery.next();
+        console.log('users :>> ', users);
+
+        return users
+    } catch (error) {
+        return [null, error];
+    }
 }
