@@ -220,7 +220,7 @@ const openChannel = async() => {
   try {
     const channelInfo = await createOrOpenChannel([ selectedUser.value.userId, currentUser.value.userId,])
     channelName.value = channelInfo.name
-
+    console.log('channelName.value :>> ', channelName.value);
     const oldMsgs = await loadMessages()
      messages.value = oldMsgs.reverse() 
 
@@ -272,6 +272,8 @@ onMounted(async() => {
   })
   registerMessageListener((channel, message) => {
     console.log('channel component :>> ', channel);
+    unreadChannelUrls.value.push(channel.url);
+    console.log('unreadChannelUrls.value :>> ', unreadChannelUrls.value);
     if (message.isUserMessage?.()) {
       console.log('message component :>> ', message);
     } else if (message.isFileMessage?.()) {
