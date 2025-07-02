@@ -145,7 +145,10 @@ export const getAllApplicationUsers = async (id: string) => {
   console.log('id :>> ', id);
     await sb.connect(id)
     try {
-        const userQuery = sb.createApplicationUserListQuery({ limit: 100 });
+        const userQuery = sb.groupChannel.createMyGroupChannelListQuery({ 
+          limit: 100,
+
+          });
         const users = await userQuery.next();
         console.log('users :>> ', users);
 

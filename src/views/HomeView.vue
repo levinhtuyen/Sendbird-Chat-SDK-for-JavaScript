@@ -181,6 +181,7 @@ const keyReload = ref(0)
 const connected = ref(false)
 const channelReady = ref(false)
 const channelName = ref('')
+const channelUrlCurren = ref('')
 
 const connect = async() => {
   try {
@@ -221,6 +222,8 @@ const openChannel = async() => {
     const channelInfo = await createOrOpenChannel([ selectedUser.value.userId, currentUser.value.userId,])
     channelName.value = channelInfo.name
     console.log('channelName.value :>> ', channelName.value);
+    console.log('channelInfo :>> ', channelInfo);
+    channelUrlCurren.value = channelInfo.channelUrl
     const oldMsgs = await loadMessages()
      messages.value = oldMsgs.reverse() 
 
