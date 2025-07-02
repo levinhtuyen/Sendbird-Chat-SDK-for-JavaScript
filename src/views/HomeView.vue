@@ -92,12 +92,9 @@
               {{ new Date(msg?.createdAt).toLocaleTimeString([], {  hour: '2-digit', minute: '2-digit' }) }}
             </p>
           </div>
-          
         </div>
-        
         <div ref="bottomAnchor"></div> <!-- điểm cuộn tới -->
       </div>
-      
       <!-- Input -->
       <div class="p-4 w-full">
         <div class="w-full">
@@ -162,9 +159,7 @@ const userChat = ref({
   initial: undefined,
   nickname: "Nguyen Van A"
 })
-watch(isPendingChat, (newVal) => {
-  console.log("Marker được chọn:", newVal)
-})
+
 watch(sendFileSuccess, (newVal) => {
   send()
   setTimeout(() => {
@@ -271,34 +266,21 @@ onMounted(async() => {
   selectedUser.value = users.value.find((user:any) => user.userId === userChat.value.userId) || users.value[0] || null
   chooseUser(selectedUser.value)
   registerOnMessageCallback(async () => {
-    const oldMsgs = await loadMessages()
-    messages.value = oldMsgs.reverse() 
-    keyReload.value+=1
-    scrollToBottom()
+    // const oldMsgs = await loadMessages()
+    // messages.value = oldMsgs.reverse() 
+    // console.log('callback messages :>> ', messages.value);
+    // keyReload.value+=1
+    // setTimeout(() => {
+    //   scrollToBottom()
+    // }, 300);
   })
   registerMessageListener((channel, message) => {
+    console.log('channel component :>> ', channel);
     if (message.isUserMessage?.()) {
-      messages.value.push({
-        message: message.message,
-        sender: {
-          userId: message.sender.userId,
-          nickname: message.sender.nickname || 'Unknown',
-        },
-        createdAt: message.createdAt,
-      })
+      console.log('message component :>> ', message);
     } else if (message.isFileMessage?.()) {
-      messages.value.push({
-        url: message.url,
-        type: message.type,
-        name: message.name,
-        sender: {
-          userId: message.sender.userId,
-          nickname: message.sender.nickname || 'Unknown',
-        },
-        createdAt: message.createdAt,
-      })
+      
     }
-    scrollToBottom()
   })
 })
 const bottomAnchor = ref<HTMLElement | null>(null)
