@@ -1,21 +1,23 @@
 <template>
   <div class="h-screen w-screen flex bg-gray-100">
      <!-- Sidebar -->
-    <div class="w-[240px] bg-gray-100  p-2 space-y-4">
+    <div class="w-[340px] bg-gray-100  p-2 space-y-4">
       <div class="bg-white rounded-lg shadow p-4 mb-4 h-full">
         <h2 class="text-xs font-bold text-gray-500 mb-2">Channel Chat</h2>
         <div
           v-for="(channel, index) in channelList"
           :key="index"
-          class="flex items-center gap-3 cursor-pointer py- line-clamp-1 py-2"
-          @click="chooseUser(channel)"
+          class="flex items-center gap-1 cursor-pointer py- line-clamp-1 py-2"
+          :class="channel.name === selectedUser.name ? 'font-bold': ''"
+          @click="changeChannel(channel)"
         >
           <div >
             <div
             
-              class="w-8 h-8 rounded-full flex items-center bg-gray-500 justify-center text-white font-semibold text-sm "
+              class="w-8 h-8 rounded-full flex items-center bg-white justify-center text-white font-semibold text-sm "
               >
-               {{ channel?.name?.slice(0,1) }}
+               <!-- {{ channel?.name?.slice(0,1) }} -->
+               <img class="rounded-full " src="https://static.sendbird.com/sample/cover/cover_13.jpg" width="26" height="26" alt="">
             </div>
           </div>
           <div class="line-clamp-1">
@@ -164,10 +166,26 @@ watch(sendFileSuccess, (newVal) => {
 })
 const fileInput = ref<HTMLInputElement | null>(null);
 const selectedUser = ref()
-const  chooseUser = async (channel:any) =>  {
-  
-  await connect()
-  await openChannel()
+const updateRouterQuery = (channel:any) => {
+  console.log('channel :>> ', channel);
+  router.replace({
+    name: route.name,
+    query: {
+      currenUserId: route.query?.currenUserId,
+      currentUserNickname: route.query?.currentUserNickname,
+      userChatId: channel.members[1]?.userId,
+      userChatNickname: channel.members[1]?.nickname
+    }
+  })
+}
+const  changeChannel = async (channel:any) =>  {
+  selectedUser.value = channel
+  await updateRouterQuery(channel)
+  await connect(userChat.value.userId)
+  await connect(currentUser.value.userId)
+  setTimeout(async() => {
+    await openChannel()
+  }, 500);
   setTimeout(() => {
     scrollToBottom()
   }, 500);
@@ -181,9 +199,9 @@ const channelReady = ref(false)
 const channelName = ref('')
 const channelUrlCurren = ref('')
 
-const connect = async() => {
+const connect = async(userId: string) => {
   try {
-    await connectSendbird(userChat.value.userId)
+    await connectSendbird(userId)
     connected.value = true
     console.log('connect success :>> ');
   } catch (err) {
@@ -217,12 +235,13 @@ const onFileChange = async (event: Event) => {
 
 const openChannel = async() => {
   try {
+    console.log('selectedUser.value openChannel :>> ', selectedUser.value);
     const channelInfo = await createOrOpenChannel(selectedUser.value)
     channelName.value = channelInfo.name
     channelUrlCurren.value = channelInfo.channelUrl
     const oldMsgs = await loadMessages()
      messages.value = oldMsgs.reverse() 
-
+    console.log('messages :>> ', messages);
     onMessage((text, sender) => {
       messages.value.push({ text, sender  })
     })
@@ -249,6 +268,7 @@ const send = async() => {
 }
 onBeforeMount(async () => {
   initSendbird(currentUser.value.userId, currentUser.value.nickname).then((sb) => {
+    
   }).catch((err) => {
     console.error('Error initializing Sendbird:', err)
   })
@@ -271,6 +291,7 @@ const getAllChannelForUserid = async() => {
   } else {
     selectedUser.value = channelList.value[0]
   }
+  await changeChannel(selectedUser.value)
   await openChannel()
   registerOnMessageCallback(async () => {
     const oldMsgs = await loadMessages()

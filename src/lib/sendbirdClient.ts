@@ -41,9 +41,10 @@ export async function connectSendbird(userId: string) {
 }
 
 // ✅ Tạo hoặc mở channel với người khác
-export const createOrOpenChannel = async(channelURl:any) => {
+export const createOrOpenChannel = async(channel:any) => {
 
-  currentChannel.value = await sb.groupChannel.getChannel(channelURl.url);
+  currentChannel.value = await sb.groupChannel.getChannel(channel.url);
+  
   console.log('currentChannel.value  :>> ', currentChannel.value );
   return {
     channelUrl: currentChannel.value.url,
@@ -133,22 +134,6 @@ export function registerOnMessageCallback(cb: () => void) {
   sb.groupChannel.addGroupChannelHandler(handlerId, handler)
 }
 
-export const getAllApplicationUsers = async (id: string) => {
-  console.log('id :>> ', id);
-    await sb.connect(id)
-    try {
-        const userQuery = sb.createApplicationUserListQuery({ 
-          limit: 100,
-          
-          });
-        const users = await userQuery.next();
-        console.log('users :>> ', users);
-
-        return users
-    } catch (error) {
-        return [null, error];
-    }
-}
 export const createOrGet1on1Channel = async (
   currentUserId: string, currenNickName: string,
   targetUserId: string, targetNickname: string
@@ -176,7 +161,7 @@ export const createOrGet1on1Channel = async (
       );
     });
 
-    if (existingChannel) {
+    if (channels?.length) {
       return channels
     }
 
