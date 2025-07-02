@@ -3,11 +3,13 @@ import { GroupChannelModule,
   GroupChannelHandler,
   GroupChannel,
   GroupChannelCreateParams, } from '@sendbird/chat/groupChannel'
-import { UserMessage, UserMessageCreateParams } from '@sendbird/chat/message'
+import { FileMessage, UserMessage, UserMessageCreateParams } from '@sendbird/chat/message'
 import { ref, nextTick } from 'vue'
 
 const bottomAnchor = ref<HTMLElement | null>(null)
 export const isPendingChat = ref(false)
+export const sendFileSuccess = ref(true)
+export const checkNewMessage = ref(true)
 interface InviteUsersToChannelParams {
   channel: GroupChannel;
   userIds: string[];
@@ -156,8 +158,23 @@ export const getAllApplicationUsers = async (id: string) => {
 export const sendFileMessage = async (file: File) => {
   if (!currentChannel.value) throw new Error('Channel chưa mở');
   const params = { file };
-  const sent = await currentChannel.value.sendFileMessage(params);
-
+  const sent = await currentChannel.value.sendFileMessage(params)
+    .onPending(() => {
+      isPendingChat.value = true;
+      sendFileSuccess.value = false;
+    })
+    .onFailed((err: Error) => {
+      isPendingChat.value = false;
+      sendFileSuccess.value = true;
+      console.error('Error sending file message:', err);
+    })
+    .onSucceeded(() => {
+      isPendingChat.value = false;
+      sendFileSuccess.value = true;
+      nextTick(() => {
+        bottomAnchor.value?.scrollIntoView({ behavior: 'smooth' });
+      });
+    });
   return sent;
 };
 
@@ -167,3 +184,25 @@ export const scrollToBottom = () => {
   })
 }
 
+// Hàm đăng ký lắng nghe tin nhắn mới
+export function registerMessageListener(
+
+  onNewMessage: (channel: GroupChannel, message: UserMessage | FileMessage) => void
+) {
+  const handler = new GroupChannelHandler();
+ 
+  handler.onMessageReceived = (channel, message) => {
+    if (message.isUserMessage?.()) {
+      
+      onNewMessage(channel as GroupChannel, message as UserMessage);
+       console.log('channel :>> ', channel);
+       console.log('message :>> ', message);
+    } else if (message.isFileMessage?.()) {
+      onNewMessage(channel as GroupChannel, message as FileMessage);
+       console.log('channel :>> ', channel);
+       console.log('message :>> ', message);
+    }
+  };
+
+  sb.groupChannel.addGroupChannelHandler('MESSAGE_HANDLER', handler);
+}

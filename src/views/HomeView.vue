@@ -110,17 +110,19 @@
               class="flex-1 text-sm text-gray-700 focus:outline-none placeholder-gray-400"
               @keydown.enter="send"
             />
-            <input type="file" ref="fileInput" class="hidden " @change="onFileChange" />
-            <button  @click="triggerFileInput" class="!px-0">
+            <input v-if="!isPendingChat" type="file" ref="fileInput" class="hidden " @change="onFileChange" />
+            <button v-if="!isPendingChat"  @click="triggerFileInput" class="!px-0">
               <img width="30" height="30" src="@/assets/choosefile.png" alt="">
             </button>
-            <button
+            <button v-if="!isPendingChat"
               @click="send"
               class=" text-sm text-gray-600 font-semibold  py-1.5 rounded-full hover:bg-gray-100 flex items-center gap-1"
             >
               Send
               <span>➤</span>
+            
             </button>
+            <img v-else width="30" height="30" src="@/assets/loading_2.gif" alt="">
           </div>
         </div>
       </div>
@@ -140,11 +142,14 @@ import {
   getAllApplicationUsers,
   onMessage,
   sendFileMessage,
+  registerMessageListener ,
   initSendbird,
-  isPendingChat
+  isPendingChat,
+  sendFileSuccess
   } from '../lib/sendbirdClient'
 
 const users = ref<any>([])
+const unreadChannelUrls = ref<string[]>([]);
 const currentUser = ref({
   bg: "bg-gray-500",
   userId: "NguyenVanC",
@@ -160,6 +165,12 @@ const userChat = ref({
 watch(isPendingChat, (newVal) => {
   console.log("Marker được chọn:", newVal)
 })
+watch(sendFileSuccess, (newVal) => {
+  send()
+  setTimeout(() => {
+    scrollToBottom()
+  }, 1000);
+})
 const fileInput = ref<HTMLInputElement | null>(null);
 const selectedUser = ref()
 const  chooseUser = async (user:any) =>  {
@@ -168,7 +179,7 @@ const  chooseUser = async (user:any) =>  {
   await openChannel()
   setTimeout(() => {
     scrollToBottom()
-  }, 1000);
+  }, 500);
 }
 
 const message = ref('')
@@ -253,7 +264,6 @@ onBeforeMount(async () => {
   }).catch((err) => {
     console.error('Error initializing Sendbird:', err)
   })
-  
 })
 onMounted(async() => {
   let allUsers = await getAllApplicationUsers(currentUser.value.userId)
@@ -264,6 +274,30 @@ onMounted(async() => {
     const oldMsgs = await loadMessages()
     messages.value = oldMsgs.reverse() 
     keyReload.value+=1
+    scrollToBottom()
+  })
+  registerMessageListener((channel, message) => {
+    if (message.isUserMessage?.()) {
+      messages.value.push({
+        message: message.message,
+        sender: {
+          userId: message.sender.userId,
+          nickname: message.sender.nickname || 'Unknown',
+        },
+        createdAt: message.createdAt,
+      })
+    } else if (message.isFileMessage?.()) {
+      messages.value.push({
+        url: message.url,
+        type: message.type,
+        name: message.name,
+        sender: {
+          userId: message.sender.userId,
+          nickname: message.sender.nickname || 'Unknown',
+        },
+        createdAt: message.createdAt,
+      })
+    }
     scrollToBottom()
   })
 })
