@@ -21,18 +21,18 @@
             </div>
           </div>
           <div class="line-clamp-1">
-            {{ user.userId }}
+            {{ user.nickname ? user.nickname : user.userId }}
           </div>
         </div>
       </div>
     </div>
 
     <!-- Chat Panel -->
-    <div class="flex-1 flex flex-col">
+    <div class="flex-1 flex flex-col" > 
       <!-- Header -->
       <div class="flex justify-center p-4 ">
         <button class="bg-gray-100 text-lg font-bold px-4 py-1 rounded-full text-gray-600">
-          {{ selectedUser?.userId || 'Select User' }}
+          {{ selectedUser?.nickname ? selectedUser?.nickname : selectedUser?.userId || 'Select User' }}
         </button>
       </div>
 
@@ -42,25 +42,48 @@
           v-for="(msg, idx) in messages"
           :key="idx"
           class="flex items-end  gap-2"
-          :class=" msg?.sender === currentUser.userId ? 'justify-end' : 'justify-start'"
+          :class=" msg?.sender?.userId === currentUser.userId ? 'justify-end' : 'justify-start'"
         >
           <!-- Avatar -->
           <!-- Avatar (Right) -->
           <div
-            v-if="msg.sender === 'unknown' || msg?.sender !== currentUser.userId"
+            v-if="msg.sender?.userId === 'unknown' || msg?.sender?.userId !== currentUser?.userId"
             class="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-sm ml-2"
             :class="msg.sender === selectedUser.userId ? 'bg-amber-400' : 'bg-gray-400'"
           >
-            {{ msg.sender !== 'unknown' ? 'You' :  msg.sender.slice(0, 1) }}
+            {{ msg.sender?.nickname !== '' ? msg.sender?.nickname?.slice(0, 1) :  msg.sender?.userId.slice(0, 1) }}
           </div>
           <!-- Message bubble -->
           <div
             class="max-w-sm px-4 py-2 rounded-xl shadow text-sm"
-            :class="msg?.sender === selectedUser.userId
+            :class="msg?.sender?.userId === selectedUser?.userId
               ? 'bg-gray-100 text-gray-900 rounded-br-none'
-              : 'bg-white border rounded-bl-none'"
+              : 'bg-white '"
           >
-            <p>{{ msg?.text }}</p>
+            <div v-if="isImage(msg)">
+              <img :src="msg.url" class="max-w-[200px] rounded" />
+            </div>
+            
+            <template v-else-if="isPdf(msg)">
+              <a
+                :href="(msg as any).url"
+                target="_blank"
+                class="text-blue-500 underline"
+              >
+                📄 PDF file - Download
+              </a>
+            </template>
+
+            <template v-else-if="isOtherFile(msg)">
+              <a
+                :href="(msg as any).url"
+                target="_blank"
+                class="text-blue-500"
+              >
+                📎 {{ (msg as any).name || 'Download file' }}
+              </a>
+            </template>
+            <p v-else>{{ msg?.message }}</p>
           </div>
           
         </div>
@@ -79,9 +102,11 @@
               class="flex-1 text-sm text-gray-700 focus:outline-none placeholder-gray-400"
               @keydown.enter="send"
             />
+            <input type="file" ref="fileInput" class="hidden" @change="onFileChange" />
+            <button @click="triggerFileInput" class="">📎</button>
             <button
               @click="send"
-              class="ml-2 text-sm text-gray-600 font-semibold px-4 py-1.5 rounded-full hover:bg-gray-100 flex items-center gap-1"
+              class=" text-sm text-gray-600 font-semibold  py-1.5 rounded-full hover:bg-gray-100 flex items-center gap-1"
             >
               Send
               <span>➤</span>
@@ -95,7 +120,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, onBeforeMount } from 'vue'
+import { ref,computed, onMounted, nextTick, onBeforeMount } from 'vue'
 import {
   connectSendbird,
   createOrOpenChannel,
@@ -104,24 +129,27 @@ import {
   sendMessage,
   getAllApplicationUsers,
   onMessage,
+  sendFileMessage,
   initSendbird,
   } from '../lib/sendbirdClient'
   
 const users = ref<any>([])
 const currentUser = ref({
   bg: "bg-gray-500",
-  userId: "User1",
+  userId: "NguyenVanB",
   initial: undefined,
-  nickname: "User1"
+  nickname: "NguyenVanB"
 })
 
-
+const fileInput = ref<HTMLInputElement | null>(null);
 const selectedUser = ref()
 const  chooseUser = async (user:any) =>  {
   selectedUser.value = user
   await connect()
   await openChannel()
-  scrollToBottom()
+  setTimeout(() => {
+    scrollToBottom()
+  }, 1000);
 }
 
 const message = ref('')
@@ -139,6 +167,31 @@ const connect = async() => {
     console.error('❌ Kết nối thất bại:', err)
   }
 }
+const triggerFileInput = () => {
+  fileInput.value?.click();
+};
+
+const onFileChange = async (event: Event) => {
+  const file = (event.target as HTMLInputElement).files?.[0];
+  if (file) {
+    let fileSuccess = await sendFileMessage(file);
+    if (fileSuccess) {
+      console.log('Gửi tệp thành công');
+      // Tải lại tin nhắn để hiển thị tệp đã gửi
+      setTimeout(async() => {
+         const oldMsgs = await loadMessages();
+        messages.value = oldMsgs.reverse();
+        keyReload.value += 1; // Tăng key để buộc Vue cập nhật
+        // Cuộn xuống cuối để hiển thị tin nhắn mới
+        
+      },  1000);
+      scrollToBottom();
+    } else {
+      console.error('Gửi tệp không thành công');
+    }
+  }
+};
+
 
 const openChannel = async() => {
   
@@ -147,11 +200,11 @@ const openChannel = async() => {
     channelName.value = channelInfo.name
 
     const oldMsgs = await loadMessages()
-    console.log('oldMsgs :>> ', oldMsgs);
+    console.log('oldMsgs 2222 :>> ', oldMsgs);
      messages.value = oldMsgs.reverse() 
 
     onMessage((text, sender) => {
-      messages.value.push({ text, sender,isHighlighted: sender !== currentUser.value.nickname  })
+      messages.value.push({ text, sender  })
     })
     channelReady.value = true
   } catch (err) {
@@ -164,7 +217,9 @@ const send = async() => {
   if (!message.value.trim()) return
   try {
     await sendMessage(message.value)
-    messages.value.push({ text: message.value, sender: currentUser.value.userId })
+    messages.value.push({ message: message.value, sender: {
+     userId: currentUser.value.userId, nickname: currentUser.value.nickname, 
+    } })
     message.value = ''
     scrollToBottom()
   } catch (err) {
@@ -182,19 +237,25 @@ onMounted(async() => {
   let allUsers = await getAllApplicationUsers(currentUser.value.userId)
   users.value = await allUsers.filter((user:any) => user.userId !== currentUser.value.userId)
   
-
-
   registerOnMessageCallback(async () => {
     console.log('📩 Nhận tin nhắn mới từ người khác')
     const oldMsgs = await loadMessages()
-    console.log('oldMsgs :>> ', oldMsgs);
+    console.log('oldMsgs 222 :>> ', oldMsgs);
     messages.value = oldMsgs.reverse() 
     keyReload.value+=1
     scrollToBottom()
   })
 })
 const bottomAnchor = ref<HTMLElement | null>(null)
-
+const isImage = (msg: any) => {
+  return msg && typeof msg === 'object' && 'url' in msg && typeof msg.type === 'string' && msg.type.startsWith('image');
+};
+const isPdf = (msg: any) => {
+  return msg && typeof msg === 'object' && 'url' in msg && typeof msg.type === 'string' && msg.type === 'application/pdf';
+};
+const isOtherFile = (msg: any) => {
+  return msg && typeof msg === 'object' && 'url' in msg && typeof msg.type === 'string' && !msg.type.startsWith('image') && msg.type !== 'application/pdf';
+};
 const scrollToBottom = () => {
   nextTick(() => {
     bottomAnchor.value?.scrollIntoView({ behavior: 'smooth' })

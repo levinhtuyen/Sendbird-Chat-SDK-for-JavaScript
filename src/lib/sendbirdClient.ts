@@ -4,20 +4,21 @@ import { GroupChannelModule,
   GroupChannel,
   GroupChannelCreateParams, } from '@sendbird/chat/groupChannel'
 import { UserMessage, UserMessageCreateParams } from '@sendbird/chat/message'
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 
+const bottomAnchor = ref<HTMLElement | null>(null)
 interface InviteUsersToChannelParams {
   channel: GroupChannel;
   userIds: string[];
 }
 
 let sb = await SendbirdChat.init({
-  appId: '1550DB5A-9A9C-47C8-A2BB-1EE2E80C75C4',
+  appId: '024DFC28-9586-48DA-9590-AB01C3478D91',
   modules: [new GroupChannelModule()],
 })
 export async function initSendbird(userId: string) {
 let sb = await SendbirdChat.init({
-  appId: '1550DB5A-9A9C-47C8-A2BB-1EE2E80C75C4',
+  appId: '024DFC28-9586-48DA-9590-AB01C3478D91',
   modules: [new GroupChannelModule()],
 })
 
@@ -82,28 +83,20 @@ export async function loadMessages(limit = 50) {
       nextResultSize: 0,
       isInclusive: true,
       reverse: true,
-      includeMetaArray: false,
-      includeReactions: false,
+      includeMetaArray: true,
+      includeReactions: true,
     }
   )
+  console.log('messages :>> ', messages);
 
-  return messages.map((msg) => ({
-    id: msg.messageId,
-    text: msg.message,
-    sender: (msg.isUserMessage && msg.isUserMessage() && 'sender' in msg && msg.sender?.userId)
-      ? msg.sender.userId
-      : 'unknown',
-  }))
+  return messages
 }
 
 // ✅ Nhận tin nhắn realtime
 export function onMessage(callback: (text: string, sender: string) => void) {
   const handler = new GroupChannelHandler()
   handler.onMessageReceived = (_, msg) => {
-    console.log('_ :>> ', _);
-    console.log('msg  :>> ', msg );
     if (msg.isUserMessage()) {
-      console.log('msg.message, msg.sender?.userId :>> ', msg.message, msg.sender?.userId);
       callback(msg.message, msg.sender?.userId || 'unknown')
     }
   }
@@ -148,4 +141,18 @@ export const getAllApplicationUsers = async (id: string) => {
     } catch (error) {
         return [null, error];
     }
+}
+
+export const sendFileMessage = async (file: File) => {
+  if (!currentChannel.value) throw new Error('Channel chưa mở');
+  const params = { file };
+  const sent = await currentChannel.value.sendFileMessage(params);
+
+  return sent;
+};
+
+export const scrollToBottom = () => {
+  nextTick(() => {
+    bottomAnchor.value?.scrollIntoView({ behavior: 'smooth' })
+  })
 }
