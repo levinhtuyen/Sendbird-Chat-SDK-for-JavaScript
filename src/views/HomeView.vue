@@ -54,12 +54,16 @@
             {{ msg.sender?.nickname !== '' ? msg.sender?.nickname?.slice(0, 1) :  msg.sender?.userId.slice(0, 1) }}
           </div>
           <!-- Message bubble -->
+          
           <div
-            class="max-w-sm px-4 py-2 rounded-xl shadow text-sm"
-            :class="msg?.sender?.userId === selectedUser?.userId
-              ? 'bg-gray-100 text-gray-900 rounded-br-none'
-              : 'bg-white '"
+            class="max-w-sm px-4 py-2 rounded-xl text-sm bg-white shadow"
+            :class="[{
+               'bg-gray-100 text-gray-900 ' : msg?.sender?.userId === selectedUser?.userId,
+               'shadow': !isImage(msg) && !isPdf(msg) && !isOtherFile(msg),
+           
+            }]"
           >
+            <p class="flex pb-1 text-gray-400">{{ msg.sender?.nickname ?? msg.sender?.userId }}</p>
             <div v-if="isImage(msg)">
               <img :src="msg.url" class="max-w-[200px] rounded" />
             </div>
@@ -84,6 +88,9 @@
               </a>
             </template>
             <p v-else>{{ msg?.message }}</p>
+            <p class="text-xs text-gray-500 mt-1" :class="msg?.sender?.userId === currentUser.userId ? 'text-right' : 'text-left'">
+              {{ new Date(msg?.createdAt).toLocaleTimeString([], {  hour: '2-digit', minute: '2-digit' }) }}
+            </p>
           </div>
           
         </div>
@@ -98,12 +105,15 @@
             <input
               v-model="message"
               type="text"
+              :disabled="isPendingChat"
               placeholder="Type your message..."
               class="flex-1 text-sm text-gray-700 focus:outline-none placeholder-gray-400"
               @keydown.enter="send"
             />
-            <input type="file" ref="fileInput" class="hidden" @change="onFileChange" />
-            <button @click="triggerFileInput" class="">📎</button>
+            <input type="file" ref="fileInput" class="hidden " @change="onFileChange" />
+            <button  @click="triggerFileInput" class="!px-0">
+              <img width="30" height="30" src="@/assets/choosefile.png" alt="">
+            </button>
             <button
               @click="send"
               class=" text-sm text-gray-600 font-semibold  py-1.5 rounded-full hover:bg-gray-100 flex items-center gap-1"
@@ -120,7 +130,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref,computed, onMounted, nextTick, onBeforeMount } from 'vue'
+import { ref,watch, onMounted, nextTick, onBeforeMount } from 'vue'
 import {
   connectSendbird,
   createOrOpenChannel,
@@ -131,16 +141,25 @@ import {
   onMessage,
   sendFileMessage,
   initSendbird,
+  isPendingChat
   } from '../lib/sendbirdClient'
-  
+
 const users = ref<any>([])
 const currentUser = ref({
   bg: "bg-gray-500",
-  userId: "NguyenVanB",
+  userId: "NguyenVanC",
   initial: undefined,
-  nickname: "NguyenVanB"
+  nickname: "Nguyen Van C"
 })
-
+const userChat = ref({
+  bg: "bg-gray-500",
+  userId: "NguyenVanA",
+  initial: undefined,
+  nickname: "Nguyen Van A"
+})
+watch(isPendingChat, (newVal) => {
+  console.log("Marker được chọn:", newVal)
+})
 const fileInput = ref<HTMLInputElement | null>(null);
 const selectedUser = ref()
 const  chooseUser = async (user:any) =>  {
@@ -200,7 +219,6 @@ const openChannel = async() => {
     channelName.value = channelInfo.name
 
     const oldMsgs = await loadMessages()
-    console.log('oldMsgs 2222 :>> ', oldMsgs);
      messages.value = oldMsgs.reverse() 
 
     onMessage((text, sender) => {
@@ -227,20 +245,23 @@ const send = async() => {
   }
 }
 onBeforeMount(async () => {
-  initSendbird(currentUser.value.userId).then((sb) => {
-  console.log('Sendbird initialized with sb:', sb)
-}).catch((err) => {
-  console.error('Error initializing Sendbird:', err)
-})
+  initSendbird(currentUser.value.userId, currentUser.value.nickname).then((sb) => {
+    initSendbird(userChat.value.userId, userChat.value.nickname).then((sb) => {
+    }).catch((err) => {
+      console.error('Error initializing Sendbird:', err)
+    })
+  }).catch((err) => {
+    console.error('Error initializing Sendbird:', err)
+  })
+  
 })
 onMounted(async() => {
   let allUsers = await getAllApplicationUsers(currentUser.value.userId)
-  users.value = await allUsers.filter((user:any) => user.userId !== currentUser.value.userId)
-  
+  users.value = await allUsers.filter((user:any) =>( user.userId !== currentUser.value.userId && user.userId !== '700160' && user.userId !== 'hungphat812'))
+  selectedUser.value = users.value.find((user:any) => user.userId === userChat.value.userId) || users.value[0] || null
+  chooseUser(selectedUser.value)
   registerOnMessageCallback(async () => {
-    console.log('📩 Nhận tin nhắn mới từ người khác')
     const oldMsgs = await loadMessages()
-    console.log('oldMsgs 222 :>> ', oldMsgs);
     messages.value = oldMsgs.reverse() 
     keyReload.value+=1
     scrollToBottom()

@@ -7,6 +7,7 @@ import { UserMessage, UserMessageCreateParams } from '@sendbird/chat/message'
 import { ref, nextTick } from 'vue'
 
 const bottomAnchor = ref<HTMLElement | null>(null)
+export const isPendingChat = ref(false)
 interface InviteUsersToChannelParams {
   channel: GroupChannel;
   userIds: string[];
@@ -16,13 +17,15 @@ let sb = await SendbirdChat.init({
   appId: '024DFC28-9586-48DA-9590-AB01C3478D91',
   modules: [new GroupChannelModule()],
 })
-export async function initSendbird(userId: string) {
+export async function initSendbird(userId: string, nickname: string ) {
 let sb = await SendbirdChat.init({
   appId: '024DFC28-9586-48DA-9590-AB01C3478D91',
   modules: [new GroupChannelModule()],
 })
 
-  await sb.connect(userId)
+  await sb.connect(userId);
+  await sb.updateCurrentUserInfo({ nickname: nickname });
+  
   return sb
 }
 
@@ -32,6 +35,7 @@ let messageCallback: (() => void) | null = null
 // ✅ Kết nối người dùng
 export async function connectSendbird(userId: string) {
   await sb.connect(userId)
+  
 }
 
 // ✅ Tạo hoặc mở channel với người khác
@@ -39,9 +43,12 @@ export async function createOrOpenChannel(ConnectToUser: string[]) {
   const params: GroupChannelCreateParams = {
     name: `Chat with ${ConnectToUser.join(', ')}`,
     invitedUserIds: ConnectToUser,
+    // coverUrl: COVER_URL, // Or .coverImage to upload a cover image file
+
+    // data: DATA,
+    // customType: CUSTOM_TYPE,
     isDistinct: true,
   }
-console.log('params :>> ', params);
   currentChannel.value = await sb.groupChannel.createChannel(params)
 
   return {
@@ -59,17 +66,21 @@ export async function sendMessage(text: string) {
 
    return await currentChannel.value.sendUserMessage(params)
       .onPending((message: any) => {
-      // The pending message for the message being sent has been created.
-      // The pending message has the same reqId value as the corresponding failed/succeeded message.
-        console.log('Pending message:', message);
+        isPendingChat.value = true
       })
       .onFailed((err: Error, message: any) => {
       // Handle error.
+        isPendingChat.value = false
         console.log('err :>> ', err);
       })
       .onSucceeded((message) => {
-      // The message has been sent successfully.
-        console.log('Message sent successfully:', message);
+        isPendingChat.value = false
+        if (messageCallback) {
+          messageCallback() // ← Gọi hàm từ component
+        }
+        nextTick(() => {
+          bottomAnchor.value?.scrollIntoView({ behavior: 'smooth' })
+        })
       });
 }
 
@@ -87,7 +98,6 @@ export async function loadMessages(limit = 50) {
       includeReactions: true,
     }
   )
-  console.log('messages :>> ', messages);
 
   return messages
 }
@@ -156,3 +166,4 @@ export const scrollToBottom = () => {
     bottomAnchor.value?.scrollIntoView({ behavior: 'smooth' })
   })
 }
+
