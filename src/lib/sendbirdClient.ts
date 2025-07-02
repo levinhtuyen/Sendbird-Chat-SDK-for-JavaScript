@@ -193,14 +193,9 @@ export function registerMessageListener(
  
   handler.onMessageReceived = (channel, message) => {
     if (message.isUserMessage?.()) {
-      
       onNewMessage(channel as GroupChannel, message as UserMessage);
-       console.log('channel :>> ', channel);
-       console.log('message :>> ', message);
     } else if (message.isFileMessage?.()) {
       onNewMessage(channel as GroupChannel, message as FileMessage);
-       console.log('channel :>> ', channel);
-       console.log('message :>> ', message);
     }
   };
 

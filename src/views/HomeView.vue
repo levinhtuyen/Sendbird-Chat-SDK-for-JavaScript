@@ -144,22 +144,20 @@ import {
   isPendingChat,
   sendFileSuccess
   } from '../lib/sendbirdClient'
+  import { useRoute, useRouter } from 'vue-router';
 
 const users = ref<any>([])
 const unreadChannelUrls = ref<string[]>([]);
-const currentUser = ref({
-  bg: "bg-gray-500",
-  userId: "NguyenVanC",
-  initial: undefined,
-  nickname: "Nguyen Van C"
+const route = useRoute();
+const router = useRouter();
+const currentUser = ref<any>({
+  userId: route.query.currenUserId,
+  nickname: route.query.currentUserNickname 
 })
-const userChat = ref({
-  bg: "bg-gray-500",
-  userId: "NguyenVanA",
-  initial: undefined,
-  nickname: "Nguyen Van A"
+const userChat = ref<any>({
+  userId: route.query.userChatId ,
+  nickname: route.query.userChatNickname
 })
-
 watch(sendFileSuccess, (newVal) => {
   send()
   setTimeout(() => {
@@ -201,7 +199,6 @@ const onFileChange = async (event: Event) => {
   if (file) {
     let fileSuccess = await sendFileMessage(file);
     if (fileSuccess) {
-      console.log('Gửi tệp thành công');
       // Tải lại tin nhắn để hiển thị tệp đã gửi
       setTimeout(async() => {
          const oldMsgs = await loadMessages();
@@ -266,13 +263,12 @@ onMounted(async() => {
   selectedUser.value = users.value.find((user:any) => user.userId === userChat.value.userId) || users.value[0] || null
   chooseUser(selectedUser.value)
   registerOnMessageCallback(async () => {
-    // const oldMsgs = await loadMessages()
-    // messages.value = oldMsgs.reverse() 
-    // console.log('callback messages :>> ', messages.value);
-    // keyReload.value+=1
-    // setTimeout(() => {
-    //   scrollToBottom()
-    // }, 300);
+    const oldMsgs = await loadMessages()
+    messages.value = oldMsgs.reverse() 
+    keyReload.value+=1
+    setTimeout(() => {
+      scrollToBottom()
+    }, 300);
   })
   registerMessageListener((channel, message) => {
     console.log('channel component :>> ', channel);
