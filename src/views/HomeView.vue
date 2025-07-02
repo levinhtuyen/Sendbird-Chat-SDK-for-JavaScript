@@ -5,23 +5,21 @@
       <div class="bg-white rounded-lg shadow p-4 mb-4 h-full">
         <h2 class="text-xs font-bold text-gray-500 mb-2">Channel Chat</h2>
         <div
-          v-for="user in users"
-          :key="user?.userId"
+          v-for="(channel, index) in channelList"
+          :key="index"
           class="flex items-center gap-3 cursor-pointer py- line-clamp-1 py-2"
-          :class="user.userId === selectedUser?.userId ? 'font-bold text-black' : 'text-gray-600'"
-          @click="chooseUser(user)"
+          @click="chooseUser(channel)"
         >
           <div >
             <div
-            :class="user.connectionStatus === 'online' ? 'bg-green-500' : 'bg-gray-400'"
-              class="w-8 h-8 rounded-full flex items-center bg-amber-500 justify-center text-white font-semibold text-sm "
-         
+            
+              class="w-8 h-8 rounded-full flex items-center bg-gray-500 justify-center text-white font-semibold text-sm "
               >
-                {{ user.userId.slice(0,1) }}
+               {{ channel?.name?.slice(0,1) }}
             </div>
           </div>
           <div class="line-clamp-1">
-            {{ user.nickname ? user.nickname : user.userId }}
+            {{ channel?.name }}
           </div>
         </div>
       </div>
@@ -32,7 +30,7 @@
       <!-- Header -->
       <div class="flex justify-center p-4 ">
         <button class="bg-gray-100 text-lg font-bold px-4 py-1 rounded-full text-gray-600">
-          {{ selectedUser?.nickname ? selectedUser?.nickname : selectedUser?.userId || 'Select User' }}
+          {{ selectedUser?.name ? selectedUser?.name : selectedUser?.userId || 'Select User' }}
         </button>
       </div>
 
@@ -129,14 +127,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref,watch, onMounted, nextTick, onBeforeMount } from 'vue'
+import { ref,watch, onMounted, nextTick, onBeforeMount,toRaw } from 'vue'
 import {
   connectSendbird,
   createOrOpenChannel,
   loadMessages,
   registerOnMessageCallback,
   sendMessage,
-  getAllApplicationUsers,
+  createOrGet1on1Channel,
   onMessage,
   sendFileMessage,
   registerMessageListener ,
@@ -146,7 +144,7 @@ import {
   } from '../lib/sendbirdClient'
   import { useRoute, useRouter } from 'vue-router';
 
-const users = ref<any>([])
+const channelList = ref<any>([])
 const unreadChannelUrls = ref<string[]>([]);
 const route = useRoute();
 const router = useRouter();
@@ -166,8 +164,8 @@ watch(sendFileSuccess, (newVal) => {
 })
 const fileInput = ref<HTMLInputElement | null>(null);
 const selectedUser = ref()
-const  chooseUser = async (user:any) =>  {
-  selectedUser.value = user
+const  chooseUser = async (channel:any) =>  {
+  
   await connect()
   await openChannel()
   setTimeout(() => {
@@ -185,8 +183,9 @@ const channelUrlCurren = ref('')
 
 const connect = async() => {
   try {
-    await connectSendbird(currentUser.value.userId)
+    await connectSendbird(userChat.value.userId)
     connected.value = true
+    console.log('connect success :>> ');
   } catch (err) {
     console.error('❌ Kết nối thất bại:', err)
   }
@@ -217,12 +216,9 @@ const onFileChange = async (event: Event) => {
 
 
 const openChannel = async() => {
-  
   try {
-    const channelInfo = await createOrOpenChannel([ selectedUser.value.userId, currentUser.value.userId,])
+    const channelInfo = await createOrOpenChannel(selectedUser.value)
     channelName.value = channelInfo.name
-    console.log('channelName.value :>> ', channelName.value);
-    console.log('channelInfo :>> ', channelInfo);
     channelUrlCurren.value = channelInfo.channelUrl
     const oldMsgs = await loadMessages()
      messages.value = oldMsgs.reverse() 
@@ -230,6 +226,7 @@ const openChannel = async() => {
     onMessage((text, sender) => {
       messages.value.push({ text, sender  })
     })
+    await loadMessages()
     channelReady.value = true
   } catch (err) {
     console.error(' Mở channel lỗi:', err)
@@ -252,19 +249,29 @@ const send = async() => {
 }
 onBeforeMount(async () => {
   initSendbird(currentUser.value.userId, currentUser.value.nickname).then((sb) => {
-    initSendbird(userChat.value.userId, userChat.value.nickname).then((sb) => {
-    }).catch((err) => {
-      console.error('Error initializing Sendbird:', err)
-    })
   }).catch((err) => {
     console.error('Error initializing Sendbird:', err)
   })
 })
-onMounted(async() => {
-  let allUsers = await getAllApplicationUsers(currentUser.value.userId)
-  users.value = await allUsers.filter((user:any) =>( user.userId !== currentUser.value.userId && user.userId !== '700160' && user.userId !== 'hungphat812'))
-  selectedUser.value = users.value.find((user:any) => user.userId === userChat.value.userId) || users.value[0] || null
-  chooseUser(selectedUser.value)
+
+const getAllChannelForUserid = async() => {
+  channelList.value  = await createOrGet1on1Channel(currentUser.value.userId, currentUser.value.nickname, userChat.value.userId, userChat.value.nickname)
+  channelList.value =  JSON.parse(JSON.stringify(channelList.value))
+  console.log('channelList.value :>> ', channelList.value);
+  const channel = channelList.value.find((channel:any) => {
+  const memberIds = channel.members.map((m:any) => m.userId);
+    return (
+      channel.memberCount === 2 &&
+      memberIds.includes(currentUser.value.userId) &&
+      memberIds.includes(userChat.value.userId)
+    );
+  });
+  if(channel) {
+    selectedUser.value = channel
+  } else {
+    selectedUser.value = channelList.value[0]
+  }
+  await openChannel()
   registerOnMessageCallback(async () => {
     const oldMsgs = await loadMessages()
     messages.value = oldMsgs.reverse() 
@@ -273,8 +280,12 @@ onMounted(async() => {
       scrollToBottom()
     }, 300);
   })
+}
+onMounted(async() => {
+  setTimeout(async() => {
+    await getAllChannelForUserid()
+  }, 500);
   registerMessageListener((channel, message) => {
-    console.log('channel component :>> ', channel);
     unreadChannelUrls.value.push(channel.url);
     console.log('unreadChannelUrls.value :>> ', unreadChannelUrls.value);
     if (message.isUserMessage?.()) {

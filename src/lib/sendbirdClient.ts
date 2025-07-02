@@ -2,7 +2,8 @@ import SendbirdChat, { SendbirdChatParams } from '@sendbird/chat'
 import { GroupChannelModule,
   GroupChannelHandler,
   GroupChannel,
-  GroupChannelCreateParams, } from '@sendbird/chat/groupChannel'
+  GroupChannelCreateParams,
+  GroupChannelListOrder, } from '@sendbird/chat/groupChannel'
 import { FileMessage, UserMessage, UserMessageCreateParams } from '@sendbird/chat/message'
 import { ref, nextTick } from 'vue'
 
@@ -20,14 +21,14 @@ let sb = await SendbirdChat.init({
   modules: [new GroupChannelModule()],
 })
 export async function initSendbird(userId: string, nickname: string ) {
-let sb = await SendbirdChat.init({
-  appId: '024DFC28-9586-48DA-9590-AB01C3478D91',
-  modules: [new GroupChannelModule()],
-})
-
-  await sb.connect(userId);
+  console.log('userId :>> ', userId);
+  console.log('nickname :>> ', nickname);
+  let sb = await SendbirdChat.init({
+    appId: '024DFC28-9586-48DA-9590-AB01C3478D91',
+    modules: [new GroupChannelModule()],
+  })
+  await sb.connect(userId)
   await sb.updateCurrentUserInfo({ nickname: nickname });
-  
   return sb
 }
 
@@ -37,22 +38,13 @@ let messageCallback: (() => void) | null = null
 // ✅ Kết nối người dùng
 export async function connectSendbird(userId: string) {
   await sb.connect(userId)
-  
 }
 
 // ✅ Tạo hoặc mở channel với người khác
-export async function createOrOpenChannel(ConnectToUser: string[]) {
-  const params: GroupChannelCreateParams = {
-    name: `Chat with ${ConnectToUser.join(', ')}`,
-    invitedUserIds: ConnectToUser,
-    // coverUrl: COVER_URL, // Or .coverImage to upload a cover image file
+export const createOrOpenChannel = async(channelURl:any) => {
 
-    // data: DATA,
-    // customType: CUSTOM_TYPE,
-    isDistinct: true,
-  }
-  currentChannel.value = await sb.groupChannel.createChannel(params)
-
+  currentChannel.value = await sb.groupChannel.getChannel(channelURl.url);
+  console.log('currentChannel.value  :>> ', currentChannel.value );
   return {
     channelUrl: currentChannel.value.url,
     name: currentChannel.value.name,
@@ -145,9 +137,9 @@ export const getAllApplicationUsers = async (id: string) => {
   console.log('id :>> ', id);
     await sb.connect(id)
     try {
-        const userQuery = sb.groupChannel.createMyGroupChannelListQuery({ 
+        const userQuery = sb.createApplicationUserListQuery({ 
           limit: 100,
-
+          
           });
         const users = await userQuery.next();
         console.log('users :>> ', users);
@@ -157,6 +149,50 @@ export const getAllApplicationUsers = async (id: string) => {
         return [null, error];
     }
 }
+export const createOrGet1on1Channel = async (
+  currentUserId: string, currenNickName: string,
+  targetUserId: string, targetNickname: string
+)  => {
+  try {
+    // Ensure connected as current user
+    if (!sb.currentUser || sb.currentUser.userId !== currentUserId) {
+      await sb.connect(currentUserId);
+    }
+
+    const query = sb.groupChannel.createMyGroupChannelListQuery({
+      includeEmpty: true,
+      limit: 50,
+    });
+
+    const channels = await query.next();
+    console.log('channels :>> ', channels);
+    // Check if a 1-on-1 channel with target user already exists
+    const existingChannel = channels.find((channel) => {
+      const memberIds = channel.members.map((m) => m.userId);
+      return (
+        channel.memberCount === 2 &&
+        memberIds.includes(currentUserId) &&
+        memberIds.includes(targetUserId)
+      );
+    });
+
+    if (existingChannel) {
+      return channels
+    }
+
+    // If not found, create a new channel
+    const newChannel = await sb.groupChannel.createChannel({
+      invitedUserIds: [targetUserId],
+      name: `${targetNickname} - ${currenNickName}`,
+      isDistinct: true,
+    });
+
+    return [newChannel];
+  } catch (error) {
+    console.error('Error in createOrGet1on1Channel:', error);
+    return null;
+  }
+};
 
 export const sendFileMessage = async (file: File) => {
   if (!currentChannel.value) throw new Error('Channel chưa mở');
