@@ -134,12 +134,12 @@ import {
   connectSendbird,
   getAndOpenChannel,
   loadMessages,
-  registerOnMessageCallback,
-  sendMessage,
+  listenToNewChannels,
+  sendMessageListener,
   createOrGet1on1Channel,
   onMessage,
   sendFileMessage,
-  registerMessageListener ,
+  // registerMessageListener ,
   initSendbird,
   isPendingChat,
   sendFileSuccess
@@ -173,8 +173,8 @@ const updateRouterQuery = (channel:any) => {
     query: {
       currenUserId: route.query?.currenUserId,
       currentUserNickname: route.query?.currentUserNickname,
-      userChatId: channel.members[1]?.userId,
-      userChatNickname: channel.members[1]?.nickname
+      userChatId: channel.members[channel.members?.length-1]?.userId,
+      userChatNickname: channel.members[channel.members?.length-1]?.nickname
     }
   })
 }
@@ -261,7 +261,7 @@ const openChannel = async() => {
 const sendMessageToChannel = async() => {
   if (!message.value.trim()) return
   try {
-    await sendMessage(message.value)
+    await sendMessageListener(message.value)
     messages.value.push({ message: message.value, sender: {
      userId: currentUser.value.userId, nickname: currentUser.value.nickname, 
     } })
@@ -298,7 +298,7 @@ const getAllChannelForUserid = async() => {
   }
   await changeChannel(selectedUser.value)
   await openChannel()
-  registerOnMessageCallback(async () => {
+  onMessage(async () => {
     const oldMsgs = await loadMessages()
     messages.value = oldMsgs.reverse() 
     keyReload.value+=1
@@ -307,19 +307,28 @@ const getAllChannelForUserid = async() => {
     }, 300);
   })
 }
+const onNewMessage = async() => {
+  channelList.value  = await createOrGet1on1Channel(currentUser.value.userId, currentUser.value.nickname, userChat.value.userId, userChat.value.nickname)
+  console.log('Có tin nhắn mới ở kênh khác:');
+};
+
+const onNewChannel = () => {
+  console.log('Có kênh mới liên quan tới bạn :>> ');
+};
 onMounted(async() => {
   setTimeout(async() => {
     await getAllChannelForUserid()
   }, 500);
-  registerMessageListener((channel, message) => {
-    unreadChannelUrls.value.push(channel.url);
-    console.log('unreadChannelUrls.value :>> ', unreadChannelUrls.value);
-    if (message.isUserMessage?.()) {
-      console.log('message component :>> ', message);
-    } else if (message.isFileMessage?.()) {
+  listenToNewChannels(onNewMessage, onNewChannel);
+  // registerMessageListener((channel, message) => {
+  //   unreadChannelUrls.value.push(channel.url);
+  //   console.log('unreadChannelUrls.value :>> ', unreadChannelUrls.value);
+  //   if (message.isUserMessage?.()) {
+  //     console.log('message component :>> ', message);
+  //   } else if (message.isFileMessage?.()) {
       
-    }
-  })
+  //   }
+  // })
 })
 const bottomAnchor = ref<HTMLElement | null>(null)
 const isImage = (msg: any) => {

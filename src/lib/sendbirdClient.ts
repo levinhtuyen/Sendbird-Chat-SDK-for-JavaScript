@@ -4,7 +4,8 @@ import { GroupChannelModule,
   GroupChannel,
   GroupChannelCreateParams,
   GroupChannelListOrder, } from '@sendbird/chat/groupChannel'
-import { FileMessage, UserMessage, UserMessageCreateParams } from '@sendbird/chat/message'
+  
+import { BaseMessage, FileMessage, UserMessage, UserMessageCreateParams } from '@sendbird/chat/message'
 import { ref, nextTick } from 'vue'
 
 const bottomAnchor = ref<HTMLElement | null>(null)
@@ -50,7 +51,7 @@ export const getAndOpenChannel = async(channel:any, users: any) => {
 }
 
 // ✅ Gửi tin nhắn
-export async function sendMessage(text: string) {
+export async function sendMessageListener(text: string) {
   if (!currentChannel.value) throw new Error('Channel chưa mở')
   const params: UserMessageCreateParams = {
       message: text,
@@ -97,12 +98,14 @@ export async function loadMessages(limit = 50) {
 // ✅ Nhận tin nhắn realtime
 export function onMessage(callback: (text: string, sender: string) => void) {
   const handler = new GroupChannelHandler()
-  handler.onMessageReceived = (_, msg) => {
-    if (msg.isUserMessage()) {
-      callback(msg.message, msg.sender?.userId || 'unknown')
+  handler.onMessageReceived = (channel, message) => {
+    console.log('Sự kiện có tin nhắn mới ở bất kỳ kênh nào :>> ');
+    console.log('channel :>> ', channel);
+    console.log('message :>> ', message);
+    if (message.isUserMessage()) {
+      callback(message.message, message.sender?.userId || 'unknown')
     }
   }
-
  sb.groupChannel.addGroupChannelHandler(`handler-${Date.now()}`, handler)
 
 }
@@ -231,26 +234,43 @@ export const sendFileMessage = async (file: File) => {
   return sent;
 };
 
-export const scrollToBottom = () => {
-  nextTick(() => {
-    bottomAnchor.value?.scrollIntoView({ behavior: 'smooth' })
-  })
-}
-
 // Hàm đăng ký lắng nghe tin nhắn mới
-export function registerMessageListener(
+// export function registerMessageListener(
 
-  onNewMessage: (channel: GroupChannel, message: UserMessage | FileMessage) => void
-) {
+//   onNewMessage: (channel: GroupChannel, message: UserMessage | FileMessage) => void
+// ) {
+//   const handler = new GroupChannelHandler();
+//   handler.onMessageReceived = (channel, message) => {
+//     if (message.isUserMessage?.()) {
+//       onNewMessage(channel as GroupChannel, message as UserMessage);
+//     } else if (message.isFileMessage?.()) {
+//       onNewMessage(channel as GroupChannel, message as FileMessage);
+//     }
+//   };
+//   sb.groupChannel.addGroupChannelHandler('MESSAGE_HANDLER', handler);
+// }
+export const listenToNewChannels = (  
+  onNewMessage: (channel: GroupChannel, message: BaseMessage) => void,
+  onNewChannel: (channel: GroupChannel) => void
+) => {
   const handler = new GroupChannelHandler();
- 
   handler.onMessageReceived = (channel, message) => {
-    if (message.isUserMessage?.()) {
-      onNewMessage(channel as GroupChannel, message as UserMessage);
-    } else if (message.isFileMessage?.()) {
-      onNewMessage(channel as GroupChannel, message as FileMessage);
+    // Only call onNewMessage if channel is a GroupChannel
+    if ((channel as GroupChannel).isGroupChannel && (channel as GroupChannel).isGroupChannel()) {
+      onNewMessage(channel as GroupChannel, message);
     }
   };
 
-  sb.groupChannel.addGroupChannelHandler('MESSAGE_HANDLER', handler);
-}
+  handler.onChannelChanged = (channel) => {
+    // Only call onNewChannel if channel is a GroupChannel
+    if ((channel as GroupChannel).isGroupChannel && (channel as GroupChannel).isGroupChannel()) {
+      onNewChannel(channel as GroupChannel);
+    }
+    console.log('channel :>> ', channel);
+  };
+
+  // Xoá handler cũ nếu có
+  const handlerId = 'new-channel-listener';
+  sb.groupChannel.removeGroupChannelHandler(handlerId);
+  sb.groupChannel.addGroupChannelHandler(handlerId, handler);
+};
