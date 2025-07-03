@@ -37,11 +37,11 @@
       </div>
 
       <!-- Messages -->
-      <div class="flex-1 px-6 py-4 space-y-4 overflow-y-auto bg-white">
+      <div class="flex-1 px-6 py-4 space-y-4 overflow-y-auto overflow-x-hidden bg-white">
         <div
           v-for="(msg, idx) in messages"
           :key="idx"
-          class="flex items-end  gap-2"
+          class="flex items-end  gap-2 ww-full"
           :class=" msg?.sender?.userId === currentUser.userId ? 'justify-end' : 'justify-start'"
         >
           <!-- Avatar -->
@@ -56,7 +56,7 @@
           <!-- Message bubble -->
           
           <div
-            class="max-w-sm px-4 py-2 rounded-xl text-sm bg-white shadow"
+            class="px-4 py-2 rounded-xl text-sm bg-white shadow"
             :class="[{
                'bg-gray-100 text-gray-900 ' : msg?.sender?.userId === selectedUser?.userId,
                'shadow': !isImage(msg) && !isPdf(msg) && !isOtherFile(msg),
@@ -88,7 +88,7 @@
               </a>
             </template>
             <p v-else>{{ msg?.message }}</p>
-            <p class="text-xs text-gray-500 mt-1" :class="msg?.sender?.userId === currentUser.userId ? 'text-right' : 'text-left'">
+            <p class="text-xs text-gray-500 mt-1" style="line-break: anywhere;" :class="msg?.sender?.userId === currentUser.userId ? 'text-right' : 'text-left'">
               {{ new Date(msg?.createdAt).toLocaleTimeString([], {  hour: '2-digit', minute: '2-digit' }) }}
             </p>
           </div>
@@ -105,14 +105,14 @@
               :disabled="isPendingChat"
               placeholder="Type your message..."
               class="flex-1 text-sm text-gray-700 focus:outline-none placeholder-gray-400"
-              @keydown.enter="send"
+              @keydown.enter="sendMessageToChannel"
             />
             <input v-if="!isPendingChat" type="file" ref="fileInput" class="hidden " @change="onFileChange" />
             <button v-if="!isPendingChat"  @click="triggerFileInput" class="!px-0">
               <img width="30" height="30" src="@/assets/choosefile.png" alt="">
             </button>
             <button v-if="!isPendingChat"
-              @click="send"
+              @click="sendMessageToChannel"
               class=" text-sm text-gray-600 font-semibold  py-1.5 rounded-full hover:bg-gray-100 flex items-center gap-1"
             >
               Send
@@ -132,7 +132,7 @@
 import { ref,watch, onMounted, nextTick, onBeforeMount,toRaw } from 'vue'
 import {
   connectSendbird,
-  createOrOpenChannel,
+  getAndOpenChannel,
   loadMessages,
   registerOnMessageCallback,
   sendMessage,
@@ -159,7 +159,7 @@ const userChat = ref<any>({
   nickname: route.query.userChatNickname
 })
 watch(sendFileSuccess, (newVal) => {
-  send()
+  sendMessageToChannel()
   setTimeout(() => {
     scrollToBottom()
   }, 1000);
@@ -181,8 +181,8 @@ const updateRouterQuery = (channel:any) => {
 const  changeChannel = async (channel:any) =>  {
   selectedUser.value = channel
   await updateRouterQuery(channel)
-  await connect(userChat.value.userId)
-  await connect(currentUser.value.userId)
+  await connectToUser(userChat.value.userId)
+  await connectToUser(currentUser.value.userId)
   setTimeout(async() => {
     await openChannel()
   }, 500);
@@ -199,11 +199,10 @@ const channelReady = ref(false)
 const channelName = ref('')
 const channelUrlCurren = ref('')
 
-const connect = async(userId: string) => {
+const connectToUser = async(userId: string) => {
   try {
     await connectSendbird(userId)
     connected.value = true
-    console.log('connect success :>> ');
   } catch (err) {
     console.error('❌ Kết nối thất bại:', err)
   }
@@ -234,9 +233,15 @@ const onFileChange = async (event: Event) => {
 
 
 const openChannel = async() => {
+  let paramsUser= {
+    currenUserId: route.query?.currenUserId,
+    currentUserNickname: route.query?.currentUserNickname,
+    userChatId: route.query?.userId,
+    userChatNickname: route.query?.nickname
+  }
   try {
     console.log('selectedUser.value openChannel :>> ', selectedUser.value);
-    const channelInfo = await createOrOpenChannel(selectedUser.value)
+    const channelInfo = await getAndOpenChannel(selectedUser.value,paramsUser)
     channelName.value = channelInfo.name
     channelUrlCurren.value = channelInfo.channelUrl
     const oldMsgs = await loadMessages()
@@ -253,7 +258,7 @@ const openChannel = async() => {
 }
 
 
-const send = async() => {
+const sendMessageToChannel = async() => {
   if (!message.value.trim()) return
   try {
     await sendMessage(message.value)

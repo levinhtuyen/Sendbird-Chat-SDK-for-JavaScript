@@ -21,8 +21,6 @@ let sb = await SendbirdChat.init({
   modules: [new GroupChannelModule()],
 })
 export async function initSendbird(userId: string, nickname: string ) {
-  console.log('userId :>> ', userId);
-  console.log('nickname :>> ', nickname);
   let sb = await SendbirdChat.init({
     appId: '024DFC28-9586-48DA-9590-AB01C3478D91',
     modules: [new GroupChannelModule()],
@@ -41,11 +39,10 @@ export async function connectSendbird(userId: string) {
 }
 
 // ✅ Tạo hoặc mở channel với người khác
-export const createOrOpenChannel = async(channel:any) => {
+export const getAndOpenChannel = async(channel:any, users: any) => {
 
   currentChannel.value = await sb.groupChannel.getChannel(channel.url);
-  
-  console.log('currentChannel.value  :>> ', currentChannel.value );
+  await currentChannel.value.inviteWithUserIds([String(users.currenUserId),String(users.userChatId)]); // 🔒 cần gọi nếu user chưa là member; 
   return {
     channelUrl: currentChannel.value.url,
     name: currentChannel.value.name,
@@ -134,6 +131,7 @@ export function registerOnMessageCallback(cb: () => void) {
   sb.groupChannel.addGroupChannelHandler(handlerId, handler)
 }
 
+// ✅ Check 1 kênh đã tồn tại với user cần chat nếu không thì tạo mới
 export const createOrGet1on1Channel = async (
   currentUserId: string, currenNickName: string,
   targetUserId: string, targetNickname: string
@@ -164,14 +162,45 @@ export const createOrGet1on1Channel = async (
     if (channels?.length) {
       return channels
     }
-
+    let dataBookingTest = {
+      sn: 3235215,
+      bookingNo: 3335215,
+      hotelName: "Test",
+      type: 1,
+      bookingStatus: 3,
+      roomTypeSn: 8,
+      roomTypeName: "Standard room",
+      totalPrice: 801000,
+      checkIn: "2025-02-18 10:00:00",
+      checkOut: "2025-02-18 12:00:00",
+      createTime: "2025-02-18 09:24:31",
+      paymentProvider: 60,
+      origin: 1,
+      partnerUserBookingId: null,
+      paymentInfo: null,
+      paymentStatus: 0,
+      overCheckoutTime: true,
+      roomTypeImagePath: "hotel/467_1483676317282/f57fc912c7a41784ef08f07ffa0cd9f8.jpg",
+      haveConfirmedNoShow: false,
+      isAction: true,
+      hasReview: false,
+      cancelBooking: false,
+      displayCancel: false,
+      hotelSn: 467,
+      roomPrice: 706000,
+      districtName: "Quận 5",
+      isAbleReview: false,
+      confirmCheckInBefore: null
+    }
     // If not found, create a new channel
     const newChannel = await sb.groupChannel.createChannel({
-      invitedUserIds: [targetUserId],
-      name: `${targetNickname} - ${currenNickName}`,
+      invitedUserIds: [currentUserId,targetUserId],
+      name: `${targetNickname}`,
+      data: JSON.stringify(dataBookingTest),
       isDistinct: true,
+      customType: 'support-chat', // optional
     });
-
+    await newChannel.inviteWithUserIds([currentUserId,targetUserId]); // 🔒 cần gọi nếu user chưa là member
     return [newChannel];
   } catch (error) {
     console.error('Error in createOrGet1on1Channel:', error);
