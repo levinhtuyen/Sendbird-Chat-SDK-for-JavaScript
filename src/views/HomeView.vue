@@ -8,7 +8,7 @@
           v-for="(channel, index) in channelList"
           :key="index"
           class="flex items-center gap-1 cursor-pointer py- line-clamp-1 py-2"
-          :class="channel.name === selectedUser.name ? 'font-bold': ''"
+          :class="channel.name === selectedChannelCurrent.name ? 'font-bold': ''"
           @click="changeChannel(channel)"
         >
           <div >
@@ -32,7 +32,7 @@
       <!-- Header -->
       <div class="flex justify-center p-4 ">
         <button class="bg-gray-100 text-lg font-bold px-4 py-1 rounded-full text-gray-600">
-          {{ selectedUser?.name ? selectedUser?.name : selectedUser?.userId || 'Select User' }}
+          {{ selectedChannelCurrent?.name ? selectedChannelCurrent?.name : selectedChannelCurrent?.currenUserId || 'Select User' }}
         </button>
       </div>
 
@@ -42,14 +42,14 @@
           v-for="(msg, idx) in messages"
           :key="idx"
           class="flex items-end  gap-2 ww-full"
-          :class=" msg?.sender?.userId === currentUser.userId ? 'justify-end' : 'justify-start'"
+          :class=" msg?.sender?.userId === currentUser.currenUserId ? 'justify-end' : 'justify-start'"
         >
           <!-- Avatar -->
           <!-- Avatar (Right) -->
           <div
-            v-if="msg.sender?.userId === 'unknown' || msg?.sender?.userId !== currentUser?.userId"
+            v-if="msg.sender?.userId === 'unknown' || msg?.sender?.userId !== currentUser?.currenUserId"
             class="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-sm ml-2"
-            :class="msg.sender === selectedUser.userId ? 'bg-amber-400' : 'bg-gray-400'"
+            :class="msg.sender === selectedChannelCurrent.currenUserId ? 'bg-amber-400' : 'bg-gray-400'"
           >
             {{ msg.sender?.nickname !== '' ? msg.sender?.nickname?.slice(0, 1) :  msg.sender?.userId.slice(0, 1) }}
           </div>
@@ -58,7 +58,7 @@
           <div
             class="px-4 py-2 rounded-xl text-sm bg-white shadow"
             :class="[{
-               'bg-gray-100 text-gray-900 ' : msg?.sender?.userId === selectedUser?.userId,
+               'bg-gray-100 text-gray-900 ' : msg?.sender?.userId === selectedChannelCurrent?.currenUserId,
                'shadow': !isImage(msg) && !isPdf(msg) && !isOtherFile(msg),
            
             }]"
@@ -88,7 +88,7 @@
               </a>
             </template>
             <p v-else>{{ msg?.message }}</p>
-            <p class="text-xs text-gray-500 mt-1" style="line-break: anywhere;" :class="msg?.sender?.userId === currentUser.userId ? 'text-right' : 'text-left'">
+            <p class="text-xs text-gray-500 mt-1" style="line-break: anywhere;" :class="msg?.sender?.userId === currentUser.currenUserId ? 'text-right' : 'text-left'">
               {{ new Date(msg?.createdAt).toLocaleTimeString([], {  hour: '2-digit', minute: '2-digit' }) }}
             </p>
           </div>
@@ -151,12 +151,12 @@ const unreadChannelUrls = ref<string[]>([]);
 const route = useRoute();
 const router = useRouter();
 const currentUser = ref<any>({
-  userId: route.query.currenUserId,
-  nickname: route.query.currentUserNickname 
+  currenUserId: route.query.currenUserId,
+  currentUserNickname: route.query.currentUserNickname 
 })
 const userChat = ref<any>({
-  userId: route.query.userChatId ,
-  nickname: route.query.userChatNickname
+  userChatId: route.query.userChatId ,
+  userChatNickname: route.query.userChatNickname
 })
 watch(sendFileSuccess, (newVal) => {
   sendMessageToChannel()
@@ -165,27 +165,30 @@ watch(sendFileSuccess, (newVal) => {
   }, 1000);
 })
 const fileInput = ref<HTMLInputElement | null>(null);
-const selectedUser = ref()
+const selectedChannelCurrent = ref()
 const updateRouterQuery = (channel:any) => {
-  console.log('channel :>> ', channel);
-  let memberDif =  channel.members.filters((member:any) => {
-    return member.userId !== currentUser.value.userId
+  let memberDif = channel.members.filter((member:any) => {
+    if(member.userId !== currentUser.value.currenUserId && member.userId!=='undefined') {
+      return member
+    }
   })
+  userChat.value.userChatId = memberDif[0]?.userId
+  userChat.value.userChatNickname = memberDif[0]?.nickname
   router.replace({
     name: route.name,
     query: {
       currenUserId: route.query?.currenUserId,
       currentUserNickname: route.query?.currentUserNickname,
-      userChatId: memberDif?.userId,
-      userChatNickname: memberDif?.nickname
+      userChatId: memberDif[0]?.userId,
+      userChatNickname: memberDif[0]?.nickname
     }
   })
 }
 const  changeChannel = async (channel:any) =>  {
-  selectedUser.value = channel
+  selectedChannelCurrent.value = channel
   await updateRouterQuery(channel)
-  await connectToUser(userChat.value.userId)
-  await connectToUser(currentUser.value.userId)
+  await connectToUser(userChat.value.userChatId)
+  await connectToUser(currentUser.value.currenUserId)
   setTimeout(async() => {
     await openChannel()
   }, 500);
@@ -239,12 +242,11 @@ const openChannel = async() => {
   let paramsUser= {
     currenUserId: route.query?.currenUserId,
     currentUserNickname: route.query?.currentUserNickname,
-    userChatId: route.query?.userId,
-    userChatNickname: route.query?.nickname
+    userChatId: route.query?.userChatId,
+    userChatNickname: route.query?.userChatNickname
   }
   try {
-    console.log('selectedUser.value openChannel :>> ', selectedUser.value);
-    const channelInfo = await getAndOpenChannel(selectedUser.value,paramsUser)
+    const channelInfo = await getAndOpenChannel(selectedChannelCurrent.value,paramsUser)
     channelName.value = channelInfo.name
     channelUrlCurren.value = channelInfo.channelUrl
     const oldMsgs = await loadMessages()
@@ -266,7 +268,7 @@ const sendMessageToChannel = async() => {
   try {
     await sendMessageListener(message.value)
     messages.value.push({ message: message.value, sender: {
-     userId: currentUser.value.userId, nickname: currentUser.value.nickname, 
+     userId: currentUser.value.currenUserId, nickname: currentUser.value.nicurrentUserNicknameckname, 
     } })
     message.value = ''
     scrollToBottom()
@@ -274,33 +276,28 @@ const sendMessageToChannel = async() => {
     console.error(' Gửi lỗi:', err)
   }
 }
-onBeforeMount(async () => {
-  initSendbird(currentUser.value.userId, currentUser.value.nickname).then((sb) => {
-    
-  }).catch((err) => {
-    console.error('Error initializing Sendbird:', err)
-  })
-})
-
 const getAllChannelForUserid = async() => {
-  channelList.value  = await createOrGet1on1Channel(currentUser.value.userId, currentUser.value.nickname, userChat.value.userId, userChat.value.nickname)
+  channelList.value  = await createOrGet1on1Channel(currentUser.value.currenUserId, currentUser.value.currentUserNickname, userChat.value.userChatId, userChat.value.userChatNickname)
   channelList.value =  JSON.parse(JSON.stringify(channelList.value))
   console.log('channelList.value :>> ', channelList.value);
-  const channel = channelList.value.find((channel:any) => {
-  const memberIds = channel.members.map((m:any) => m.userId);
-    return (
-      channel.memberCount === 2 &&
-      memberIds.includes(currentUser.value.userId) &&
-      memberIds.includes(userChat.value.userId)
-    );
-  });
-  if(channel) {
-    selectedUser.value = channel
-  } else {
-    selectedUser.value = channelList.value[0]
+  if(channelList.value?.length) {
+    const channel = channelList.value.find((channel:any) => {
+      const memberIds = channel.members.map((m:any) => m.userId);
+      return (
+        channel.memberCount === 2 &&
+        memberIds.includes(currentUser.value.currenUserId) &&
+        memberIds.includes(userChat.value.currenUserId)
+      );
+    });
+    if(channel) {
+      selectedChannelCurrent.value = channel
+    } else {
+      selectedChannelCurrent.value = channelList.value[0]
+    }
+    await changeChannel(selectedChannelCurrent.value)
+    await openChannel()
   }
-  await changeChannel(selectedUser.value)
-  await openChannel()
+  
   onMessage(async () => {
     const oldMsgs = await loadMessages()
     messages.value = oldMsgs.reverse() 
@@ -311,13 +308,23 @@ const getAllChannelForUserid = async() => {
   })
 }
 const onNewMessage = async() => {
-  channelList.value  = await createOrGet1on1Channel(currentUser.value.userId, currentUser.value.nickname, userChat.value.userId, userChat.value.nickname)
+  channelList.value  = await createOrGet1on1Channel(currentUser.value.currenUserId, currentUser.value.currentUserNickname, userChat.value.userChatId, userChat.value.userChatNickname)
   console.log('Có tin nhắn mới ở kênh khác:');
 };
 
 const onNewChannel = () => {
   console.log('Có kênh mới liên quan tới bạn :>> ');
 };
+// onBeforeMount trước khi khởi tạo DOM
+onBeforeMount(async () => {
+  initSendbird(currentUser.value.currenUserId, currentUser.value.currentUserNickname).then((sb) => {
+    
+  }).catch((err) => {
+    console.error('Error initializing Sendbird:', err)
+  })
+})
+
+// onMounted sau khi khởi tạo DOM
 onMounted(async() => {
   setTimeout(async() => {
     await getAllChannelForUserid()

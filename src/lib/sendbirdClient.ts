@@ -151,6 +151,7 @@ export const createOrGet1on1Channel = async (
     });
 
     const channels = await query.next();
+
     console.log('channels :>> ', channels);
     // Check if a 1-on-1 channel with target user already exists
     const existingChannel = channels.find((channel) => {
@@ -170,32 +171,13 @@ export const createOrGet1on1Channel = async (
       bookingNo: 3335215,
       hotelName: "Test",
       type: 1,
-      bookingStatus: 3,
-      roomTypeSn: 8,
-      roomTypeName: "Standard room",
-      totalPrice: 801000,
-      checkIn: "2025-02-18 10:00:00",
-      checkOut: "2025-02-18 12:00:00",
-      createTime: "2025-02-18 09:24:31",
-      paymentProvider: 60,
-      origin: 1,
-      partnerUserBookingId: null,
-      paymentInfo: null,
-      paymentStatus: 0,
-      overCheckoutTime: true,
-      roomTypeImagePath: "hotel/467_1483676317282/f57fc912c7a41784ef08f07ffa0cd9f8.jpg",
-      haveConfirmedNoShow: false,
-      isAction: true,
-      hasReview: false,
-      cancelBooking: false,
-      displayCancel: false,
       hotelSn: 467,
       roomPrice: 706000,
-      districtName: "Quận 5",
-      isAbleReview: false,
-      confirmCheckInBefore: null
     }
     // If not found, create a new channel
+    console.log('currentUserId,targetUserId :>> ', currentUserId,targetUserId);
+    console.log('targetNickname :>> ', targetNickname);
+    console.log('dataBookingTest :>> ', dataBookingTest);
     const newChannel = await sb.groupChannel.createChannel({
       invitedUserIds: [currentUserId,targetUserId],
       name: `${targetNickname}`,
@@ -203,6 +185,7 @@ export const createOrGet1on1Channel = async (
       isDistinct: true,
       customType: 'support-chat', // optional
     });
+    console.log('newChannel :>> ', newChannel);
     await newChannel.inviteWithUserIds([currentUserId,targetUserId]); // 🔒 cần gọi nếu user chưa là member
     return [newChannel];
   } catch (error) {
