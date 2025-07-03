@@ -8,7 +8,7 @@
           v-for="(channel, index) in channelList"
           :key="index"
           @click="changeChannel(channel)">
-          <div class="flex items-center gap-1 cursor-pointer py- line-clamp-1 py-2"
+          <div class="flex items-center gap-1 cursor-pointer py- line-clamp-1 pt-2"
           :class="channel.name === selectedChannelCurrent.name ? 'font-bold': ''">
             <div
               class="w-8 h-8 rounded-full flex items-center bg-white justify-center text-white font-semibold text-sm "
@@ -20,7 +20,7 @@
             </div>
           </div>
           <p class="flex-1 w-full pl-9 text-gray-400 text-sm line-clamp-1"
-          :class="userSeen.isSeen === false && channel?.lastMessage?.message === userSeen.message ? 'font-semibold text-gray-800': ''"
+          :class="userSeen.isSeen === false && channel?.lastMessage?.message === userSeen.message ? 'font-semibold text-gray-800 animate-bounce': ''"
           >{{ channel?.lastMessage?.message }}</p>
         </div>
       </div>
