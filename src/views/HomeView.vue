@@ -7,22 +7,21 @@
         <div
           v-for="(channel, index) in channelList"
           :key="index"
-          class="flex items-center gap-1 cursor-pointer py- line-clamp-1 py-2"
-          :class="channel.name === selectedChannelCurrent.name ? 'font-bold': ''"
-          @click="changeChannel(channel)"
-        >
-          <div >
+          @click="changeChannel(channel)">
+          <div class="flex items-center gap-1 cursor-pointer py- line-clamp-1 py-2"
+          :class="channel.name === selectedChannelCurrent.name ? 'font-bold': ''">
             <div
-            
               class="w-8 h-8 rounded-full flex items-center bg-white justify-center text-white font-semibold text-sm "
               >
-               <!-- {{ channel?.name?.slice(0,1) }} -->
                <img class="rounded-full " src="https://static.sendbird.com/sample/cover/cover_13.jpg" width="26" height="26" alt="">
             </div>
+            <div class="line-clamp-1 ">
+              {{ channel?.name }}
+            </div>
           </div>
-          <div class="line-clamp-1">
-            {{ channel?.name }}
-          </div>
+          <p class="flex-1 w-full pl-9 text-gray-400 text-sm line-clamp-1"
+          :class="userSeen.isSeen === false && channel?.lastMessage?.message === userSeen.message ? 'font-semibold text-gray-800': ''"
+          >{{ channel?.lastMessage?.message }}</p>
         </div>
       </div>
     </div>
@@ -149,6 +148,11 @@ import {
 const channelList = ref<any>([])
 const unreadChannelUrls = ref<string[]>([]);
 const route = useRoute();
+const userSeen = ref({
+  message: '',
+  isSeen: true,
+  channelName: ''
+})
 const router = useRouter();
 const currentUser = ref<any>({
   currenUserId: route.query.currenUserId,
@@ -186,6 +190,11 @@ const updateRouterQuery = (channel:any) => {
 }
 const  changeChannel = async (channel:any) =>  {
   selectedChannelCurrent.value = channel
+  if(channel.name === userSeen.value.channelName) {
+    userSeen.value.isSeen = true
+    userSeen.value.message = ''
+    userSeen.value.channelName = ''
+  }
   await updateRouterQuery(channel)
   await connectToUser(userChat.value.userChatId)
   await connectToUser(currentUser.value.currenUserId)
@@ -252,8 +261,9 @@ const openChannel = async() => {
     const oldMsgs = await loadMessages()
      messages.value = oldMsgs.reverse() 
     console.log('messages :>> ', messages);
+    console.log('new Date().getTime() :>> ', new Date().getTime());
     onMessage((text, sender) => {
-      messages.value.push({ text, sender  })
+      messages.value.push({ text, sender,createdAt: new Date().getTime()  })
     })
     await loadMessages()
     channelReady.value = true
@@ -269,7 +279,7 @@ const sendMessageToChannel = async() => {
     await sendMessageListener(message.value)
     messages.value.push({ message: message.value, sender: {
      userId: currentUser.value.currenUserId, nickname: currentUser.value.nicurrentUserNicknameckname, 
-    } })
+    },createdAt: new Date().getTime() })
     message.value = ''
     scrollToBottom()
   } catch (err) {
@@ -307,9 +317,15 @@ const getAllChannelForUserid = async() => {
     }, 300);
   })
 }
-const onNewMessage = async() => {
+const onNewMessage = async(channel: any, message: any) => {
   channelList.value  = await createOrGet1on1Channel(currentUser.value.currenUserId, currentUser.value.currentUserNickname, userChat.value.userChatId, userChat.value.userChatNickname)
+  console.log('channel, message :>> ', channel, message);
   console.log('Có tin nhắn mới ở kênh khác:');
+  if(channel.name !== selectedChannelCurrent.value?.name) {
+    userSeen.value.isSeen = false
+    userSeen.value.message = channel.lastMessage?.message
+    userSeen.value.channelName = channel.name
+  }
 };
 
 const onNewChannel = () => {

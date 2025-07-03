@@ -180,7 +180,7 @@ export const createOrGet1on1Channel = async (
     console.log('dataBookingTest :>> ', dataBookingTest);
     const newChannel = await sb.groupChannel.createChannel({
       invitedUserIds: [currentUserId,targetUserId],
-      name: `${targetNickname}`,
+      name: `Channel chat ${targetNickname} - ${currenNickName}`,
       data: JSON.stringify(dataBookingTest),
       isDistinct: true,
       customType: 'support-chat', // optional
