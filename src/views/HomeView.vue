@@ -168,13 +168,16 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const selectedUser = ref()
 const updateRouterQuery = (channel:any) => {
   console.log('channel :>> ', channel);
+  let memberDif =  channel.members.filters((member:any) => {
+    return member.userId !== currentUser.value.userId
+  })
   router.replace({
     name: route.name,
     query: {
       currenUserId: route.query?.currenUserId,
       currentUserNickname: route.query?.currentUserNickname,
-      userChatId: channel.members[channel.members?.length-1]?.userId,
-      userChatNickname: channel.members[channel.members?.length-1]?.nickname
+      userChatId: memberDif?.userId,
+      userChatNickname: memberDif?.nickname
     }
   })
 }
