@@ -18,12 +18,12 @@ interface InviteUsersToChannelParams {
 }
 
 let sb = await SendbirdChat.init({
-  appId: '024DFC28-9586-48DA-9590-AB01C3478D91',
+  appId: 'DBB7C41F-5232-493A-9244-3F11E1C44B6B',
   modules: [new GroupChannelModule()],
 })
 export async function initSendbird(userId: string, nickname: string ) {
   let sb = await SendbirdChat.init({
-    appId: '024DFC28-9586-48DA-9590-AB01C3478D91',
+    appId: 'DBB7C41F-5232-493A-9244-3F11E1C44B6B',
     modules: [new GroupChannelModule()],
   })
   await sb.connect(userId)

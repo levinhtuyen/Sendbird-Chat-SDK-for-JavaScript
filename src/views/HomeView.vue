@@ -259,7 +259,7 @@ const openChannel = async() => {
     channelName.value = channelInfo.name
     channelUrlCurren.value = channelInfo.channelUrl
     const oldMsgs = await loadMessages()
-     messages.value = oldMsgs.reverse() 
+    messages.value = oldMsgs.reverse() 
     console.log('messages :>> ', messages);
     console.log('new Date().getTime() :>> ', new Date().getTime());
     onMessage((text, sender) => {
