@@ -129,16 +129,22 @@ export async function loadMessages(limit = 50) {
 // ✅ Nhận tin nhắn realtime - Chỉ dùng 1 handler duy nhất
 let messageHandlerRegistered = false
 let reloadMessagesCallback: (() => Promise<void>) | null = null
+let inboxUpdateCallback: ((channel: any, message: BaseMessage) => Promise<void> | void) | null = null
 
-export function registerMessageHandler(reloadCallback: () => Promise<void>) {
+export function registerMessageHandler(
+  reloadCallback: () => Promise<void>,
+  onInboxUpdate?: (channel: any, message: BaseMessage) => Promise<void> | void
+) {
   // Chỉ đăng ký handler 1 lần
   if (messageHandlerRegistered) {
     // Cập nhật callback mới
     reloadMessagesCallback = reloadCallback
+    inboxUpdateCallback = onInboxUpdate ?? null
     return
   }
   
   reloadMessagesCallback = reloadCallback
+  inboxUpdateCallback = onInboxUpdate ?? null
   
   const handler = new GroupChannelHandler()
   handler.onMessageReceived = async (channel, message) => {
@@ -153,12 +159,19 @@ export function registerMessageHandler(reloadCallback: () => Promise<void>) {
       return
     }
     
-    // Chỉ reload nếu tin nhắn thuộc channel đang mở
+    // Nếu là tin nhắn thuộc channel đang mở -> reload messages hiện tại
     if (currentChannel.value && channel.url === currentChannel.value.url) {
       if (reloadMessagesCallback) {
-        console.log('📥 Tin nhắn mới nhận, reload danh sách')
+        console.log('📥 Tin nhắn mới nhận - reload messages của channel hiện tại')
         await reloadMessagesCallback()
       }
+      return
+    }
+
+    // Nếu tin nhắn thuộc channel khác, call inbox update callback để UI cập nhật
+    if (inboxUpdateCallback) {
+      console.log('📥 Tin nhắn mới - cập nhật inbox (last message, unread count)')
+      await inboxUpdateCallback(channel, message)
     }
   }
   
@@ -303,6 +316,32 @@ export const sendFileMessage = async (file: File) => {
 //   };
 //   sb.groupChannel.addGroupChannelHandler('MESSAGE_HANDLER', handler);
 // }
+// ✅ Lấy số tin nhắn chưa đọc cho channel hiện tại
+export async function getUnreadMessageCount(channel: GroupChannel): Promise<number> {
+  try {
+    // SDK keeps unreadMessageCount property
+    return channel.unreadMessageCount || 0
+  } catch (err) {
+    console.warn('Failed to get unread count for channel', err)
+    return 0
+  }
+}
+
+// ✅ Đánh dấu kênh là đã đọc
+export async function markChannelAsRead(channel: GroupChannel): Promise<void> {
+  try {
+    if (!channel) return;
+    // Some SDK versions expose markAsRead; use (any) to be safe
+    if ((channel as any).markAsRead) {
+      await (channel as any).markAsRead();
+    }
+    // unread count will be updated by SDK events; set 0 for local usage
+    (channel as any).unreadMessageCount = 0;
+  } catch (err) {
+    console.warn('Failed to mark channel as read:', err);
+  }
+}
+
 export const listenToNewChannels = (  
   onNewMessage: (channel: GroupChannel, message: BaseMessage) => void,
   onNewChannel: (channel: GroupChannel) => void

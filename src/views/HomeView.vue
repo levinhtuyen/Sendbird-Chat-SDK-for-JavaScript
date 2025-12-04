@@ -5,23 +5,28 @@
       <div class="bg-white rounded-lg shadow p-4 mb-4 h-full">
         <h2 class="text-xs font-bold text-gray-500 mb-2">Channel Chat</h2>
         <div
-          v-for="(channel, index) in channelList"
-          :key="index"
+          v-for="(channel, index) in sortedChannelList"
+          :key="channel.url"
           @click="changeChannel(channel)">
-          <div class="flex items-center gap-1 cursor-pointer py- line-clamp-1 pt-2"
-          :class="channel.name === selectedChannelCurrent.name ? 'font-bold': ''">
+          <div class="flex items-center gap-2 cursor-pointer py- line-clamp-1 pt-2"
+          :class="channel.url === selectedChannelCurrent?.url ? 'font-bold': (channel.unreadMessageCount > 0 ? 'font-bold': '')">
             <div
               class="w-8 h-8 rounded-full flex items-center bg-white justify-center text-white font-semibold text-sm "
               >
                <img class="rounded-full " src="https://static.sendbird.com/sample/cover/cover_13.jpg" width="26" height="26" alt="">
             </div>
             <div class="line-clamp-1 ">
-              {{ channel?.name }}
+              {{ getChannelDisplayName(channel) }}
             </div>
           </div>
-          <p class="flex-1 w-full pl-9 text-gray-400 text-sm line-clamp-1"
-          :class="userSeen.isSeen === false && channel?.lastMessage?.message === userSeen.message ? 'font-semibold text-gray-800 animate-bounce': ''"
-          >{{ channel?.lastMessage?.message }}</p>
+          <div class="flex items-center justify-between w-full pl-9">
+            <p class="flex-1 text-gray-400 text-sm line-clamp-1"
+            :class="channel.unreadMessageCount > 0 ? 'font-bold text-gray-800' : (userSeen.isSeen === false && channel?.lastMessage?.message === userSeen.message ? 'font-semibold text-gray-800 animate-bounce': '')"
+            >{{ channel?.lastMessage?.message }}</p>
+            <div v-if="channel.unreadMessageCount > 0" class="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full">
+              {{ channel.unreadMessageCount }}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -48,7 +53,7 @@
           <div
             v-if="msg.sender?.userId === 'unknown' || msg?.sender?.userId !== currentUser?.currenUserId"
             class="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-sm ml-2"
-            :class="msg.sender === selectedChannelCurrent.currenUserId ? 'bg-amber-400' : 'bg-gray-400'"
+            :class="msg.sender === selectedChannelCurrent?.currenUserId ? 'bg-amber-400' : 'bg-gray-400'"
           >
             {{ msg.sender?.nickname !== '' ? msg.sender?.nickname?.slice(0, 1) :  msg.sender?.userId.slice(0, 1) }}
           </div>
@@ -139,6 +144,7 @@ import {
   isPendingChat,
   listenToNewChannels,
   loadMessages,
+  markChannelAsRead,
   registerMessageHandler,
   sendFileMessage,
   sendFileSuccess,
@@ -146,12 +152,13 @@ import {
 } from '../lib/sendbirdClient';
 
 const channelList = ref<any>([])
+const sortedChannelList = ref<any>([])
 const unreadChannelUrls = ref<string[]>([]);
 const route = useRoute();
 const userSeen = ref({
   message: '',
   isSeen: true,
-  channelName: ''
+  channelUrl: ''
 })
 const router = useRouter();
 const currentUser = ref<any>({
@@ -192,10 +199,18 @@ const updateRouterQuery = (channel:any) => {
 }
 const  changeChannel = async (channel:any, shouldUpdateUrl = true) =>  {
   selectedChannelCurrent.value = channel
-  if(channel.name === userSeen.value.channelName) {
+  // Mark channel as read when user opens it
+  try {
+    await markChannelAsRead(channel)
+    channel.unreadMessageCount = 0
+    sortChannels()
+  } catch (err) {
+    console.warn('Failed to mark as read:', err)
+  }
+  if (channel.url === userSeen.value.channelUrl) {
     userSeen.value.isSeen = true
     userSeen.value.message = ''
-    userSeen.value.channelName = ''
+    userSeen.value.channelUrl = ''
   }
   
   // Only update URL when user manually clicks on a channel (not on initial load)
@@ -227,12 +242,20 @@ const getChatTitle = () => {
     return 'Select User'
   }
   
-  const nickname = userChat.value.userChatNickname || selectedChannelCurrent.value?.name
+  const nickname = userChat.value.userChatNickname || getChannelDisplayName(selectedChannelCurrent.value)
   if (userChat.value.isUser) {
     return `Chat với người dùng ${nickname}`
   } else {
     return `Chat với khách sạn ${nickname}`
   }
+}
+
+const getChannelDisplayName = (channel: any) => {
+  if (!channel) return 'Unknown'
+  if (channel.name) return channel.name
+  // Fallback to member nickname
+  const other = channel.members?.find((m: any) => m.userId !== currentUser.value.currenUserId)
+  return other?.nickname || other?.userId || channel.url || 'Unknown'
 }
 
 const connectToUser = async(userId: string) => {
@@ -254,7 +277,7 @@ const onFileChange = async (event: Event) => {
     if (fileSuccess) {
       // Tải lại tin nhắn để hiển thị tệp đã gửi
       setTimeout(async() => {
-         const oldMsgs = await loadMessages();
+        const oldMsgs = await loadMessages();
         messages.value = oldMsgs.reverse();
         keyReload.value += 1; // Tăng key để buộc Vue cập nhật
         // Cuộn xuống cuối để hiển thị tin nhắn mới
@@ -290,6 +313,13 @@ const openChannel = async() => {
     messages.value = oldMsgs.reverse() 
     console.log('messages :>> ', messages);
     channelReady.value = true
+    // Ensure channel is marked read and unread count reset
+    try {
+      await markChannelAsRead(selectedChannelCurrent.value)
+      selectedChannelCurrent.value.unreadMessageCount = 0
+    } catch (err) {
+      // ignore
+    }
     scrollToBottom()
   } catch (err) {
     console.error(' Mở channel lỗi:', err)
@@ -307,6 +337,21 @@ const sendMessageToChannel = async() => {
     const messageText = message.value
     message.value = ''  // Clear input immediately
     await sendMessageListener(messageText)
+    // Update UI quickly: set lastMessage and reset unread for selected channel
+    try {
+      if (selectedChannelCurrent.value) {
+        selectedChannelCurrent.value.lastMessage = { message: messageText, createdAt: Date.now() }
+        selectedChannelCurrent.value.unreadMessageCount = 0
+        // find in channelList and update
+        const idx = channelList.value.findIndex((c: any) => c.url === selectedChannelCurrent.value.url)
+        if (idx >= 0) {
+          channelList.value[idx].lastMessage = { message: messageText, createdAt: Date.now() }
+          channelList.value[idx].unreadMessageCount = 0
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
     // Messages reloaded in sendMessageListener via reloadMessagesNow
     scrollToBottom()
   } catch (err) {
@@ -326,13 +371,30 @@ const getAllChannelForUserid = async() => {
     return;
   }
   
-  channelList.value = JSON.parse(JSON.stringify(result.channels || []))
+  channelList.value = result.channels || []
+  // Ensure every channel has a display name (to avoid missing name on UI)
+  channelList.value.forEach((ch: any) => {
+    if (!ch.name) ch.name = getChannelDisplayName(ch)
+  })
+  // Load unread counts for each channel
+  await Promise.all(channelList.value.map(async (ch: any) => {
+    try {
+      // `getUnreadMessageCount` expects a GroupChannel; if channel is serialised object this may not work
+      // Try to use `unreadMessageCount` from the object or fallback to 0
+      const localCount = ch.unreadMessageCount ?? 0
+      ch.unreadMessageCount = localCount
+    } catch (e) {
+      ch.unreadMessageCount = ch.unreadMessageCount ?? 0
+    }
+  }))
+  // Sort after setting unread counts
+  sortChannels()
   console.log('channelList.value :>> ', channelList.value);
   
   if (channelList.value?.length) {
     // If we have a target channel from query params, use it
     if (result.targetChannel) {
-      selectedChannelCurrent.value = JSON.parse(JSON.stringify(result.targetChannel))
+      selectedChannelCurrent.value = result.targetChannel
     } else {
       // Otherwise find channel matching userChatId or use first channel
       const channel = channelList.value.find((channel: any) => {
@@ -352,10 +414,10 @@ const getAllChannelForUserid = async() => {
   // Register message handler for real-time updates (only once)
   registerMessageHandler(async () => {
     const oldMsgs = await loadMessages()
-    messages.value = oldMsgs.reverse() 
+    messages.value = oldMsgs.reverse()
     keyReload.value += 1
     
-    // Also refresh channel list to update last message preview
+    // Also refresh channel list to update last message preview and unread counts
     const result = await createOrGet1on1Channel(
       currentUser.value.currenUserId, 
       currentUser.value.currentUserNickname, 
@@ -363,26 +425,101 @@ const getAllChannelForUserid = async() => {
       userChat.value.userChatNickname
     )
     if (result?.channels) {
-      channelList.value = JSON.parse(JSON.stringify(result.channels))
+    channelList.value = result.channels
+      // ensure name and unread count for each channel
+      channelList.value.forEach((ch: any) => {
+        if (!ch.name) ch.name = getChannelDisplayName(ch)
+        ch.unreadMessageCount = ch.unreadMessageCount || 0
+      })
+      sortChannels()
     }
     
     setTimeout(() => {
       scrollToBottom()
     }, 300);
+  }, async (channel, message) => {
+    // Inbox update callback - update channel last message preview and unread count
+    try {
+      const channelUrl = channel.url
+      // Find in list
+      const idx = channelList.value.findIndex((c: any) => c.url === channelUrl)
+      if (idx >= 0) {
+        // Update last message preview and unread count
+        channelList.value[idx].lastMessage = message || channel.lastMessage
+        channelList.value[idx].unreadMessageCount = (channel.unreadMessageCount !== undefined && channel.unreadMessageCount !== null) ? channel.unreadMessageCount : ((channelList.value[idx].unreadMessageCount || 0) + 1)
+        // Move to top
+        const updated = channelList.value.splice(idx, 1)[0]
+        channelList.value.unshift(updated)
+      } else {
+        // Prepend new channel
+        channel.unreadMessageCount = channel.unreadMessageCount ?? 1
+          if (!channel.name) channel.name = getChannelDisplayName(channel)
+          channelList.value.unshift(channel)
+      }
+      sortChannels()
+      // Update userSeen so the UI can highlight the preview of the channel with unread messages
+      if (userSeen.value.channelUrl !== channel.url) {
+        userSeen.value.isSeen = false
+        userSeen.value.message = channel.lastMessage?.message || ''
+        userSeen.value.channelUrl = channel.url
+      }
+    } catch (err) {
+      console.warn('Inbox update failed', err)
+    }
   })
 }
 const onNewMessage = async(channel: any, message: any) => {
   // This is now only called for channel-level events, not message events
   console.log('Channel event - channel:', channel);
-  if(channel.name !== selectedChannelCurrent.value?.name) {
-    userSeen.value.isSeen = false
-    userSeen.value.message = channel.lastMessage?.message
-    userSeen.value.channelName = channel.name
+  try {
+    if (channel.url !== selectedChannelCurrent.value?.url) {
+      userSeen.value.isSeen = false
+      userSeen.value.message = channel.lastMessage?.message
+      userSeen.value.channelUrl = channel.url
+      // Find channel in list and update preview & unread
+      const idx = channelList.value.findIndex((c: any) => c.url === channel.url)
+      if (idx >= 0) {
+        channelList.value[idx].lastMessage = message || channel.lastMessage
+        channelList.value[idx].unreadMessageCount = (channel.unreadMessageCount !== undefined && channel.unreadMessageCount !== null) ? channel.unreadMessageCount : (channelList.value[idx].unreadMessageCount || 0)
+        // Move to top
+        const updated = channelList.value.splice(idx, 1)[0]
+        channelList.value.unshift(updated)
+      } else {
+        // Prepend as new channel
+        channel.unreadMessageCount = channel.unreadMessageCount ?? 1
+        if (!channel.name) channel.name = getChannelDisplayName(channel)
+        channelList.value.unshift(channel)
+      }
+      sortChannels()
+    }
+  } catch (err) {
+    console.warn('onNewMessage event error:', err)
   }
 };
 
 const onNewChannel = () => {
   console.log('Có kênh mới liên quan tới bạn :>> ');
+  // Khi có kênh mới, refresh danh sách channel
+  setTimeout(async () => {
+    try {
+      const result = await createOrGet1on1Channel(
+        currentUser.value.currenUserId, 
+        currentUser.value.currentUserNickname, 
+        userChat.value.userChatId, 
+        userChat.value.userChatNickname
+      )
+      if (result?.channels) {
+        channelList.value = result.channels
+        channelList.value.forEach((ch: any) => {
+          if (!ch.name) ch.name = getChannelDisplayName(ch)
+          ch.unreadMessageCount = ch.unreadMessageCount || 0
+        })
+        sortChannels()
+      }
+    } catch (err) {
+      console.warn('Error refreshing channels on new channel:', err)
+    }
+  }, 400)
 };
 // onBeforeMount trước khi khởi tạo DOM
 onBeforeMount(async () => {
@@ -427,6 +564,24 @@ const isPdf = (msg: any) => {
 const isOtherFile = (msg: any) => {
   return msg && typeof msg === 'object' && 'url' in msg && typeof msg.type === 'string' && !msg.type.startsWith('image') && msg.type !== 'application/pdf';
 };
+const sortChannels = () => {
+  // Sắp xếp channels: unreadMessageCount desc, sau đó theo last message time desc
+  const sorted = [...channelList.value].sort((a, b) => {
+    const aUnread = a.unreadMessageCount ?? 0
+    const bUnread = b.unreadMessageCount ?? 0
+    if (aUnread !== bUnread) return bUnread - aUnread
+    const aTime = a?.lastMessage?.createdAt || a.lastMessageAt || 0
+    const bTime = b?.lastMessage?.createdAt || b.lastMessageAt || 0
+    return bTime - aTime
+  })
+  sortedChannelList.value = sorted
+}
+
+// Watch channelList to re-sort
+watch(() => channelList.value, () => {
+  sortChannels()
+}, { deep: true })
+
 const scrollToBottom = () => {
   nextTick(() => {
     bottomAnchor.value?.scrollIntoView({ behavior: 'smooth' })
