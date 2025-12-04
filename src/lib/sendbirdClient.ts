@@ -1,12 +1,12 @@
-import SendbirdChat, { SendbirdChatParams } from '@sendbird/chat'
-import { GroupChannelModule,
-  GroupChannelHandler,
+import SendbirdChat from '@sendbird/chat'
+import {
   GroupChannel,
-  GroupChannelCreateParams,
-  GroupChannelListOrder, } from '@sendbird/chat/groupChannel'
+  GroupChannelHandler,
+  GroupChannelModule
+} from '@sendbird/chat/groupChannel'
   
-import { BaseMessage, FileMessage, UserMessage, UserMessageCreateParams } from '@sendbird/chat/message'
-import { ref, nextTick } from 'vue'
+import { BaseMessage, UserMessageCreateParams } from '@sendbird/chat/message'
+import { nextTick, ref } from 'vue'
 
 const bottomAnchor = ref<HTMLElement | null>(null)
 export const isPendingChat = ref(false)
@@ -18,16 +18,23 @@ interface InviteUsersToChannelParams {
 }
 
 let sb = await SendbirdChat.init({
-  appId: 'DBB7C41F-5232-493A-9244-3F11E1C44B6B',
+  appId: 'A63E8391-FA54-476B-A089-FF6883C8129A',
   modules: [new GroupChannelModule()],
 })
 export async function initSendbird(userId: string, nickname: string ) {
-  let sb = await SendbirdChat.init({
-    appId: 'DBB7C41F-5232-493A-9244-3F11E1C44B6B',
+  if (!userId || userId === 'undefined' || userId === 'null') {
+    throw new Error('Invalid userId: userId is required')
+  }
+  
+  sb = await SendbirdChat.init({
+    appId: 'A63E8391-FA54-476B-A089-FF6883C8129A',
     modules: [new GroupChannelModule()],
   })
   await sb.connect(userId)
-  await sb.updateCurrentUserInfo({ nickname: nickname });
+  
+  if (nickname && nickname !== 'undefined' && nickname !== 'null') {
+    await sb.updateCurrentUserInfo({ nickname: nickname });
+  }
   return sb
 }
 
@@ -36,6 +43,9 @@ let messageCallback: (() => void) | null = null
 
 // ✅ Kết nối người dùng
 export async function connectSendbird(userId: string) {
+  if (!userId || userId === 'undefined' || userId === 'null') {
+    throw new Error('Invalid userId: userId is required')
+  }
   await sb.connect(userId)
 }
 
@@ -43,7 +53,20 @@ export async function connectSendbird(userId: string) {
 export const getAndOpenChannel = async(channel:any, users: any) => {
 
   currentChannel.value = await sb.groupChannel.getChannel(channel.url);
-  await currentChannel.value.inviteWithUserIds([String(users.currenUserId),String(users.userChatId)]); // 🔒 cần gọi nếu user chưa là member; 
+  
+  // Filter out invalid userIds
+  const userIdsToInvite = [String(users.currenUserId), String(users.userChatId)]
+    .filter(id => id && id !== 'undefined' && id !== 'null');
+
+  if (userIdsToInvite.length > 0) {
+    try {
+      await currentChannel.value.inviteWithUserIds(userIdsToInvite);
+    } catch (error) {
+      // User already in channel or user not found - ignore
+      console.warn('Failed to invite users (may already be members):', error);
+    }
+  }
+  
   return {
     channelUrl: currentChannel.value.url,
     name: currentChannel.value.name,
@@ -51,30 +74,38 @@ export const getAndOpenChannel = async(channel:any, users: any) => {
 }
 
 // ✅ Gửi tin nhắn
-export async function sendMessageListener(text: string) {
+let lastSentMessageTimestamp = 0
+
+export async function sendMessageListener(text: string): Promise<any> {
   if (!currentChannel.value) throw new Error('Channel chưa mở')
   const params: UserMessageCreateParams = {
       message: text,
   };
 
-   return await currentChannel.value.sendUserMessage(params)
+  return new Promise((resolve, reject) => {
+    currentChannel.value!.sendUserMessage(params)
       .onPending((message: any) => {
         isPendingChat.value = true
       })
       .onFailed((err: Error, message: any) => {
-      // Handle error.
         isPendingChat.value = false
         console.log('err :>> ', err);
+        reject(err)
       })
-      .onSucceeded((message) => {
+      .onSucceeded(async (message) => {
         isPendingChat.value = false
-        if (messageCallback) {
-          messageCallback() // ← Gọi hàm từ component
-        }
+        // Record the timestamp of sent message to skip duplicate reload in onMessageReceived
+        lastSentMessageTimestamp = Date.now()
+        
+        // Reload messages immediately so sender can see their message
+        await reloadMessagesNow()
+        
         nextTick(() => {
           bottomAnchor.value?.scrollIntoView({ behavior: 'smooth' })
         })
+        resolve(message)
       });
+  })
 }
 
 // ✅ Lấy tin nhắn cũ
@@ -95,19 +126,60 @@ export async function loadMessages(limit = 50) {
   return messages
 }
 
-// ✅ Nhận tin nhắn realtime
-export function onMessage(callback: (text: string, sender: string) => void) {
+// ✅ Nhận tin nhắn realtime - Chỉ dùng 1 handler duy nhất
+let messageHandlerRegistered = false
+let reloadMessagesCallback: (() => Promise<void>) | null = null
+
+export function registerMessageHandler(reloadCallback: () => Promise<void>) {
+  // Chỉ đăng ký handler 1 lần
+  if (messageHandlerRegistered) {
+    // Cập nhật callback mới
+    reloadMessagesCallback = reloadCallback
+    return
+  }
+  
+  reloadMessagesCallback = reloadCallback
+  
   const handler = new GroupChannelHandler()
-  handler.onMessageReceived = (channel, message) => {
-    console.log('Sự kiện có tin nhắn mới ở bất kỳ kênh nào :>> ');
-    console.log('channel :>> ', channel);
-    console.log('message :>> ', message);
-    if (message.isUserMessage()) {
-      callback(message.message, message.sender?.userId || 'unknown')
+  handler.onMessageReceived = async (channel, message) => {
+    console.log('onMessageReceived - channel:', channel.url);
+    console.log('onMessageReceived - currentChannel:', currentChannel.value?.url);
+    
+    // Kiểm tra xem đây có phải tin nhắn của chính user gửi không
+    // Nếu là tin nhắn vừa gửi (trong 1 giây), bỏ qua để tránh reload 2 lần
+    const timeSinceSent = Date.now() - lastSentMessageTimestamp
+    if (timeSinceSent < 1000) {
+      console.log('⏭️ Bỏ qua reload vì đây là tin nhắn vừa gửi');
+      return
+    }
+    
+    // Chỉ reload nếu tin nhắn thuộc channel đang mở
+    if (currentChannel.value && channel.url === currentChannel.value.url) {
+      if (reloadMessagesCallback) {
+        console.log('📥 Tin nhắn mới nhận, reload danh sách')
+        await reloadMessagesCallback()
+      }
     }
   }
- sb.groupChannel.addGroupChannelHandler(`handler-${Date.now()}`, handler)
+  
+  const handlerId = 'main-message-handler'
+  sb.groupChannel.removeGroupChannelHandler(handlerId)
+  sb.groupChannel.addGroupChannelHandler(handlerId, handler)
+  messageHandlerRegistered = true
+}
 
+// Manual trigger to reload messages (for sender to see their own message)
+export async function reloadMessagesNow() {
+  if (reloadMessagesCallback) {
+    await reloadMessagesCallback()
+  }
+}
+
+// Legacy onMessage - kept for compatibility but now uses single handler
+export function onMessage(callback: (text: string, sender: string) => void) {
+  // This is now a no-op since we use registerMessageHandler
+  // Keeping for backward compatibility
+  console.warn('onMessage is deprecated, use registerMessageHandler instead')
 }
 
 // ✅ Mời người dùng vào channel
@@ -119,27 +191,18 @@ export const inviteUsersToChannel = async (
 };
 
 
-// ✅ Đăng ký callback khi có tin nhắn mới
-export function registerOnMessageCallback(cb: () => void) {
-  messageCallback = cb
-
-  const handler = new GroupChannelHandler()
-  handler.onMessageReceived = () => {
-    if (messageCallback) {
-      messageCallback() // ← Gọi hàm từ component
-    }
-  }
-
-  const handlerId = 'chat-callback-' + Math.random().toString(36).slice(2)
-  sb.groupChannel.addGroupChannelHandler(handlerId, handler)
-}
-
 // ✅ Check 1 kênh đã tồn tại với user cần chat nếu không thì tạo mới
 export const createOrGet1on1Channel = async (
   currentUserId: string, currenNickName: string,
   targetUserId: string, targetNickname: string
 )  => {
   try {
+    // Validate currentUserId
+    if (!currentUserId || currentUserId === 'undefined' || currentUserId === 'null') {
+      console.warn('Invalid currentUserId, cannot get channels');
+      return { channels: [], targetChannel: null };
+    }
+    
     // Ensure connected as current user
     if (!sb.currentUser || sb.currentUser.userId !== currentUserId) {
       await sb.connect(currentUserId);
@@ -153,6 +216,13 @@ export const createOrGet1on1Channel = async (
     const channels = await query.next();
 
     console.log('channels :>> ', channels);
+    
+    // If targetUserId is invalid, just return existing channels without creating new one
+    if (!targetUserId || targetUserId === 'undefined' || targetUserId === 'null') {
+      console.warn('Invalid targetUserId, returning existing channels only');
+      return { channels, targetChannel: channels[0] || null };
+    }
+    
     // Check if a 1-on-1 channel with target user already exists
     const existingChannel = channels.find((channel) => {
       const memberIds = channel.members.map((m) => m.userId);
@@ -163,9 +233,13 @@ export const createOrGet1on1Channel = async (
       );
     });
 
-    if (channels?.length) {
-      return channels
+    // If channel with target user exists, return all channels (with existing channel info)
+    if (existingChannel) {
+      console.log('Found existing channel with target user:', existingChannel.name);
+      return { channels, targetChannel: existingChannel };
     }
+    
+    // If no channel with target user, create a new one
     let dataBookingTest = {
       sn: 3235215,
       bookingNo: 3335215,
@@ -175,9 +249,7 @@ export const createOrGet1on1Channel = async (
       roomPrice: 706000,
     }
     // If not found, create a new channel
-    console.log('currentUserId,targetUserId :>> ', currentUserId,targetUserId);
-    console.log('targetNickname :>> ', targetNickname);
-    console.log('dataBookingTest :>> ', dataBookingTest);
+
     const newChannel = await sb.groupChannel.createChannel({
       invitedUserIds: [currentUserId,targetUserId],
       name: `Channel chat ${targetNickname} - ${currenNickName}`,
@@ -185,12 +257,11 @@ export const createOrGet1on1Channel = async (
       isDistinct: true,
       customType: 'support-chat', // optional
     });
-    console.log('newChannel :>> ', newChannel);
-    await newChannel.inviteWithUserIds([currentUserId,targetUserId]); // 🔒 cần gọi nếu user chưa là member
-    return [newChannel];
+    // inviteWithUserIds is not needed since we already included users in invitedUserIds
+    return { channels: [newChannel, ...channels], targetChannel: newChannel };
   } catch (error) {
     console.error('Error in createOrGet1on1Channel:', error);
-    return null;
+    return { channels: [], targetChannel: null };
   }
 };
 
@@ -237,19 +308,16 @@ export const listenToNewChannels = (
   onNewChannel: (channel: GroupChannel) => void
 ) => {
   const handler = new GroupChannelHandler();
-  handler.onMessageReceived = (channel, message) => {
-    // Only call onNewMessage if channel is a GroupChannel
-    if ((channel as GroupChannel).isGroupChannel && (channel as GroupChannel).isGroupChannel()) {
-      onNewMessage(channel as GroupChannel, message);
-    }
-  };
+  
+  // Don't add onMessageReceived here - let registerMessageHandler handle it
+  // This handler is only for channel-level events (new channel, channel changed)
 
   handler.onChannelChanged = (channel) => {
     // Only call onNewChannel if channel is a GroupChannel
     if ((channel as GroupChannel).isGroupChannel && (channel as GroupChannel).isGroupChannel()) {
       onNewChannel(channel as GroupChannel);
     }
-    console.log('channel :>> ', channel);
+    console.log('channel changed :>> ', channel);
   };
 
   // Xoá handler cũ nếu có

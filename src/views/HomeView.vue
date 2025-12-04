@@ -31,7 +31,7 @@
       <!-- Header -->
       <div class="flex justify-center p-4 ">
         <button class="bg-gray-100 text-lg font-bold px-4 py-1 rounded-full text-gray-600">
-          {{ selectedChannelCurrent?.name ? selectedChannelCurrent?.name : selectedChannelCurrent?.currenUserId || 'Select User' }}
+          {{ getChatTitle() }}
         </button>
       </div>
 
@@ -128,22 +128,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref,watch, onMounted, nextTick, onBeforeMount,toRaw } from 'vue'
+import { nextTick, onBeforeMount, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import {
   connectSendbird,
-  getAndOpenChannel,
-  loadMessages,
-  listenToNewChannels,
-  sendMessageListener,
   createOrGet1on1Channel,
-  onMessage,
-  sendFileMessage,
+  getAndOpenChannel,
   // registerMessageListener ,
   initSendbird,
   isPendingChat,
-  sendFileSuccess
-  } from '../lib/sendbirdClient'
-  import { useRoute, useRouter } from 'vue-router';
+  listenToNewChannels,
+  loadMessages,
+  registerMessageHandler,
+  sendFileMessage,
+  sendFileSuccess,
+  sendMessageListener
+} from '../lib/sendbirdClient';
 
 const channelList = ref<any>([])
 const unreadChannelUrls = ref<string[]>([]);
@@ -160,7 +160,8 @@ const currentUser = ref<any>({
 })
 const userChat = ref<any>({
   userChatId: route.query.userChatId ,
-  userChatNickname: route.query.userChatNickname
+  userChatNickname: route.query.userChatNickname,
+  isUser: route.query.isUser === 'true'
 })
 watch(sendFileSuccess, (newVal) => {
   sendMessageToChannel()
@@ -184,26 +185,32 @@ const updateRouterQuery = (channel:any) => {
       currenUserId: route.query?.currenUserId,
       currentUserNickname: route.query?.currentUserNickname,
       userChatId: memberDif[0]?.userId,
-      userChatNickname: memberDif[0]?.nickname
+      userChatNickname: memberDif[0]?.nickname,
+      isUser: route.query?.isUser
     }
   })
 }
-const  changeChannel = async (channel:any) =>  {
+const  changeChannel = async (channel:any, shouldUpdateUrl = true) =>  {
   selectedChannelCurrent.value = channel
   if(channel.name === userSeen.value.channelName) {
     userSeen.value.isSeen = true
     userSeen.value.message = ''
     userSeen.value.channelName = ''
   }
-  await updateRouterQuery(channel)
-  await connectToUser(userChat.value.userChatId)
-  await connectToUser(currentUser.value.currenUserId)
-  setTimeout(async() => {
-    await openChannel()
-  }, 500);
-  setTimeout(() => {
-    scrollToBottom()
-  }, 500);
+  
+  // Only update URL when user manually clicks on a channel (not on initial load)
+  if (shouldUpdateUrl) {
+    await updateRouterQuery(channel)
+  }
+  
+  // Only connect if userId is valid
+  if (currentUser.value.currenUserId && currentUser.value.currenUserId !== 'undefined') {
+    await connectToUser(currentUser.value.currenUserId)
+  }
+  
+  // Open channel and load messages
+  await openChannel()
+  scrollToBottom()
 }
 
 const message = ref('')
@@ -213,6 +220,20 @@ const connected = ref(false)
 const channelReady = ref(false)
 const channelName = ref('')
 const channelUrlCurren = ref('')
+
+// Get chat title based on isUser value
+const getChatTitle = () => {
+  if (!selectedChannelCurrent.value?.name && !userChat.value.userChatNickname) {
+    return 'Select User'
+  }
+  
+  const nickname = userChat.value.userChatNickname || selectedChannelCurrent.value?.name
+  if (userChat.value.isUser) {
+    return `Chat với người dùng ${nickname}`
+  } else {
+    return `Chat với khách sạn ${nickname}`
+  }
+}
 
 const connectToUser = async(userId: string) => {
   try {
@@ -248,25 +269,28 @@ const onFileChange = async (event: Event) => {
 
 
 const openChannel = async() => {
-  let paramsUser= {
-    currenUserId: route.query?.currenUserId,
-    currentUserNickname: route.query?.currentUserNickname,
-    userChatId: route.query?.userChatId,
-    userChatNickname: route.query?.userChatNickname
+  // Use current userChat values (may be updated when clicking different channels)
+  let paramsUser = {
+    currenUserId: currentUser.value.currenUserId,
+    currentUserNickname: currentUser.value.currentUserNickname,
+    userChatId: userChat.value.userChatId,
+    userChatNickname: userChat.value.userChatNickname
   }
+  
+  if (!selectedChannelCurrent.value?.url) {
+    console.warn('No channel selected');
+    return;
+  }
+  
   try {
-    const channelInfo = await getAndOpenChannel(selectedChannelCurrent.value,paramsUser)
+    const channelInfo = await getAndOpenChannel(selectedChannelCurrent.value, paramsUser)
     channelName.value = channelInfo.name
     channelUrlCurren.value = channelInfo.channelUrl
     const oldMsgs = await loadMessages()
     messages.value = oldMsgs.reverse() 
     console.log('messages :>> ', messages);
-    console.log('new Date().getTime() :>> ', new Date().getTime());
-    onMessage((text, sender) => {
-      messages.value.push({ text, sender,createdAt: new Date().getTime()  })
-    })
-    await loadMessages()
     channelReady.value = true
+    scrollToBottom()
   } catch (err) {
     console.error(' Mở channel lỗi:', err)
   }
@@ -275,52 +299,81 @@ const openChannel = async() => {
 
 const sendMessageToChannel = async() => {
   if (!message.value.trim()) return
+  if (!channelReady.value) {
+    console.warn('Channel is not ready')
+    return
+  }
   try {
-    await sendMessageListener(message.value)
-    messages.value.push({ message: message.value, sender: {
-     userId: currentUser.value.currenUserId, nickname: currentUser.value.nicurrentUserNicknameckname, 
-    },createdAt: new Date().getTime() })
-    message.value = ''
+    const messageText = message.value
+    message.value = ''  // Clear input immediately
+    await sendMessageListener(messageText)
+    // Messages reloaded in sendMessageListener via reloadMessagesNow
     scrollToBottom()
   } catch (err) {
     console.error(' Gửi lỗi:', err)
   }
 }
 const getAllChannelForUserid = async() => {
-  channelList.value  = await createOrGet1on1Channel(currentUser.value.currenUserId, currentUser.value.currentUserNickname, userChat.value.userChatId, userChat.value.userChatNickname)
-  channelList.value =  JSON.parse(JSON.stringify(channelList.value))
-  console.log('channelList.value :>> ', channelList.value);
-  if(channelList.value?.length) {
-    const channel = channelList.value.find((channel:any) => {
-      const memberIds = channel.members.map((m:any) => m.userId);
-      return (
-        channel.memberCount === 2 &&
-        memberIds.includes(currentUser.value.currenUserId) &&
-        memberIds.includes(userChat.value.currenUserId)
-      );
-    });
-    if(channel) {
-      selectedChannelCurrent.value = channel
-    } else {
-      selectedChannelCurrent.value = channelList.value[0]
-    }
-    await changeChannel(selectedChannelCurrent.value)
-    await openChannel()
+  const result = await createOrGet1on1Channel(
+    currentUser.value.currenUserId, 
+    currentUser.value.currentUserNickname, 
+    userChat.value.userChatId, 
+    userChat.value.userChatNickname
+  )
+  
+  if (!result) {
+    console.warn('Failed to get/create channel');
+    return;
   }
   
-  onMessage(async () => {
+  channelList.value = JSON.parse(JSON.stringify(result.channels || []))
+  console.log('channelList.value :>> ', channelList.value);
+  
+  if (channelList.value?.length) {
+    // If we have a target channel from query params, use it
+    if (result.targetChannel) {
+      selectedChannelCurrent.value = JSON.parse(JSON.stringify(result.targetChannel))
+    } else {
+      // Otherwise find channel matching userChatId or use first channel
+      const channel = channelList.value.find((channel: any) => {
+        const memberIds = channel.members.map((m: any) => m.userId);
+        return (
+          channel.memberCount === 2 &&
+          memberIds.includes(currentUser.value.currenUserId) &&
+          memberIds.includes(userChat.value.userChatId)
+        );
+      });
+      selectedChannelCurrent.value = channel || channelList.value[0]
+    }
+    
+    await changeChannel(selectedChannelCurrent.value, false)  // Don't update URL on initial load
+  }
+  
+  // Register message handler for real-time updates (only once)
+  registerMessageHandler(async () => {
     const oldMsgs = await loadMessages()
     messages.value = oldMsgs.reverse() 
-    keyReload.value+=1
+    keyReload.value += 1
+    
+    // Also refresh channel list to update last message preview
+    const result = await createOrGet1on1Channel(
+      currentUser.value.currenUserId, 
+      currentUser.value.currentUserNickname, 
+      userChat.value.userChatId, 
+      userChat.value.userChatNickname
+    )
+    if (result?.channels) {
+      channelList.value = JSON.parse(JSON.stringify(result.channels))
+    }
+    
     setTimeout(() => {
       scrollToBottom()
     }, 300);
   })
 }
 const onNewMessage = async(channel: any, message: any) => {
-  channelList.value  = await createOrGet1on1Channel(currentUser.value.currenUserId, currentUser.value.currentUserNickname, userChat.value.userChatId, userChat.value.userChatNickname)
-  console.log('channel, message :>> ', channel, message);
-  console.log('Có tin nhắn mới ở kênh khác:');
+  // This is now only called for channel-level events, not message events
+  console.log('Channel event - channel:', channel);
   if(channel.name !== selectedChannelCurrent.value?.name) {
     userSeen.value.isSeen = false
     userSeen.value.message = channel.lastMessage?.message
@@ -333,7 +386,15 @@ const onNewChannel = () => {
 };
 // onBeforeMount trước khi khởi tạo DOM
 onBeforeMount(async () => {
-  initSendbird(currentUser.value.currenUserId, currentUser.value.currentUserNickname).then((sb) => {
+  const userId = currentUser.value.currenUserId
+  const nickname = currentUser.value.currentUserNickname
+  
+  if (!userId || userId === 'undefined') {
+    console.warn('Missing currenUserId in query params. Please provide currenUserId.')
+    return
+  }
+  
+  initSendbird(userId, nickname || userId).then((sb) => {
     
   }).catch((err) => {
     console.error('Error initializing Sendbird:', err)

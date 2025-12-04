@@ -1,8 +1,8 @@
 // utils/sendbird.ts
 import axios from 'axios'
 
-const APP_ID = '133CC8F6-6ECE-459D-B738-04F6C8C8C59D'
-const MASTER_TOKEN = '7826a2ae5fdd37fab6e4030ab867771c9a5ed012'
+const APP_ID = 'A63E8391-FA54-476B-A089-FF6883C8129A'
+const MASTER_TOKEN = 'fac7809fbb3dc2bab184589a5eac247c20ebd5db'
 
 const baseURL = `https://api-${APP_ID}.sendbird.com/v3`
 
