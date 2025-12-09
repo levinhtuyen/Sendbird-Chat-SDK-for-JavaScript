@@ -41,6 +41,23 @@ export async function initSendbird(userId: string, nickname: string ) {
 const currentChannel = ref<GroupChannel | null>(null)
 let messageCallback: (() => void) | null = null
 
+/**
+ * Sanitize a message string before sending.
+ * Currently replaces the Vietnamese verb "chửi" with "***".
+ */
+export function sanitizeMessage(text: string): string {
+  if (!text) return text
+  try {
+    // Normalize to handle diacritics consistently
+    const normalized = text.normalize ? text.normalize('NFC') : text
+    // Replace occurrences of the word "chửi" (case-insensitive) with '***'
+    return normalized.replace(/chửi/gi, '***')
+  } catch (err) {
+    // On any unexpected error, return original text
+    return text
+  }
+}
+
 // ✅ Kết nối người dùng
 export async function connectSendbird(userId: string) {
   if (!userId || userId === 'undefined' || userId === 'null') {
@@ -77,10 +94,14 @@ export const getAndOpenChannel = async(channel:any, users: any) => {
 let lastSentMessageTimestamp = 0
 
 export async function sendMessageListener(text: string): Promise<any> {
+  // Sanitize input to avoid sending disallowed words. Replace occurrences
+  // of the Vietnamese word "chửi" with "***" (case-insensitive).
+  // We also normalize the text to NFC to handle diacritics consistently.
+  const sanitizedText = sanitizeMessage(text)
   if (!currentChannel.value) throw new Error('Channel chưa mở')
-  const params: UserMessageCreateParams = {
-      message: text,
-  };
+    const params: UserMessageCreateParams = {
+      message: sanitizedText,
+    };
 
   return new Promise((resolve, reject) => {
     currentChannel.value!.sendUserMessage(params)

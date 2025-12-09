@@ -91,7 +91,11 @@
                 📎 {{ (msg as any).name || 'Download file' }}
               </a>
             </template>
-            <p v-else>{{ msg?.message }}</p>
+            <div v-else>
+              <p>{{ msg?.message }}</p>
+              <!-- Show warning if message contains the sanitized marker '***' -->
+              <p v-if="messageHasViolation(msg)" class="text-xs text-red-600 mt-1 font-semibold">⚠️ Bạn đã vi phạm quy tắc ứng xử</p>
+            </div>
             <p class="text-xs text-gray-500 mt-1" style="line-break: anywhere;" :class="msg?.sender?.userId === currentUser.currenUserId ? 'text-right' : 'text-left'">
               {{ new Date(msg?.createdAt).toLocaleTimeString([], {  hour: '2-digit', minute: '2-digit' }) }}
             </p>
@@ -146,6 +150,7 @@ import {
   loadMessages,
   markChannelAsRead,
   registerMessageHandler,
+  sanitizeMessage,
   sendFileMessage,
   sendFileSuccess,
   sendMessageListener
@@ -335,17 +340,20 @@ const sendMessageToChannel = async() => {
   }
   try {
     const messageText = message.value
+    if (!messageText.trim()) return
+    // Sanitize message both for sending and for UI preview
+    const sanitizedMessage = sanitizeMessage(messageText)
     message.value = ''  // Clear input immediately
-    await sendMessageListener(messageText)
+    await sendMessageListener(sanitizedMessage)
     // Update UI quickly: set lastMessage and reset unread for selected channel
     try {
       if (selectedChannelCurrent.value) {
-        selectedChannelCurrent.value.lastMessage = { message: messageText, createdAt: Date.now() }
+      selectedChannelCurrent.value.lastMessage = { message: sanitizedMessage, createdAt: Date.now() }
         selectedChannelCurrent.value.unreadMessageCount = 0
         // find in channelList and update
         const idx = channelList.value.findIndex((c: any) => c.url === selectedChannelCurrent.value.url)
-        if (idx >= 0) {
-          channelList.value[idx].lastMessage = { message: messageText, createdAt: Date.now() }
+          if (idx >= 0) {
+          channelList.value[idx].lastMessage = { message: sanitizedMessage, createdAt: Date.now() }
           channelList.value[idx].unreadMessageCount = 0
         }
       }
@@ -564,6 +572,13 @@ const isPdf = (msg: any) => {
 const isOtherFile = (msg: any) => {
   return msg && typeof msg === 'object' && 'url' in msg && typeof msg.type === 'string' && !msg.type.startsWith('image') && msg.type !== 'application/pdf';
 };
+// Check if a message contains sanitized marker '***' (used to signal replacements of profanity)
+function messageHasViolation(msg: any) {
+  if (!msg) return false
+  const text = typeof msg === 'string' ? msg : msg?.message
+  if (!text || typeof text !== 'string') return false
+  return text.includes('***')
+}
 const sortChannels = () => {
   // Sắp xếp channels: unreadMessageCount desc, sau đó theo last message time desc
   const sorted = [...channelList.value].sort((a, b) => {
