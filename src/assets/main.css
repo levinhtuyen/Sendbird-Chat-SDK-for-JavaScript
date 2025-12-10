@@ -1,1 +1,3 @@
 @import "tailwindcss";
+
+/* Chat UI: moved to Tailwind utility classes in templates; removed custom chat rule set */
