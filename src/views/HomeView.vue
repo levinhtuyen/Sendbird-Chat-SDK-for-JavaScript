@@ -63,17 +63,13 @@
           @click="changeChannel(channel)"
         >
           <div class="flex gap-2 w-full">
-            <div
-              class="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden text-sm font-semibold text-white"
-              :class="userChat.isGender === 'male' ? 'bg-amber-400' : 'bg-gray-400'"
-            >
-              <img
-                class="w-full h-full object-cover"
-                :src="getChannelAvatar(channel)"
-                width="40"
-                height="40"
-                alt=""
-              />
+            <div class="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden text-sm font-semibold text-white" :class="userChat.isGender === 'male' ? 'bg-amber-400' : 'bg-gray-400'">
+              <img v-if="getChannelAvatar(channel)" class="w-full h-full object-cover" :src="getChannelAvatar(channel)" width="40" height="40" alt="" />
+              <template v-else>
+                <span>
+                  {{ (channel.members?.find((m: any) => m.userId !== currentUser.currenUserId)?.nickname || channel.name || '?').slice(0, 1) }}
+                </span>
+              </template>
             </div>
             <div class="flex-1 ">
               <div class="flex items-center justify-between gap-2">
@@ -123,33 +119,33 @@
         <div class="flex items-center gap-3">
           <div class="relative">
             <div
-              class="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-white font-semibold text-sm"
-              :class="userChat.isGender === 'male' ? 'bg-sky-400' : 'bg-blue-300'"
+              class="w-14 h-14 bg-white overflow-hidden flex items-center justify-center text-white font-semibold text-sm"
+             
             >
-              <template v-if="selectedChannelCurrent?.members?.find((m: any) => m.userId !== currentUser.currenUserId)?.profileUrl">
-                <img
-                  :src="selectedChannelCurrent.members.find((m: any) => m.userId !== currentUser.currenUserId)?.profileUrl"
-                  alt="avatar"
-                  class="w-full h-full object-cover"
-                />
-              </template>
-              <template v-else>
-                <span>
-                  {{
-                    (selectedChannelCurrent?.members?.find((m: any) => m.userId !== currentUser.currenUserId)?.nickname || selectedChannelCurrent?.name || "?")?.slice(0, 1)
-                  }}
-                </span>
-              </template>
+              <div class="relative">
+                <div
+                  class=" relative w-10 h-10  flex items-center justify-center overflow-hidden text-sm font-semibold text-white"
+             
+                >
+                  <img
+                    v-if="getChannelAvatar(selectedChannelCurrent)"
+                    class="w-full h-full object-cover relative"
+                    :src="getChannelAvatar(selectedChannelCurrent)"
+                    width="40"
+                    height="40"
+                    alt=""
+                  />
+                </div>
+                <div class="w-[8px] h-[8px] rounded-full  bg-green-400 absolute -right-0 bottom-0 z-10"></div>
+
+              </div>
             </div>
           </div>
           <div class="flex flex-col">
             <div class="text-sm font-semibold text-gray-900">
               {{ selectedChannelCurrent ? getChannelDisplayName(selectedChannelCurrent) : getChatTitle() }}
             </div>
-            <div class="text-xs text-gray-500 flex gap-2 items-center">            
-              <div class="w-3 h-3 rounded-full border-2 border-white bg-green-400"></div>
-              <span>{{ selectedChannelCurrent ? 'Trực tuyến' : '' }}</span>
-            </div>
+        
           </div>
         </div>
         <div class="ml-auto flex items-center gap-2">
@@ -172,63 +168,28 @@
             </div>
 
             <div
-              class="flex items-end gap-2 w-full"
+              class="flex items-end gap-2 w-full py-1"
               :class="msg?.sender?.userId === currentUser.currenUserId ? 'justify-end' : 'justify-start'"
             >
-            <!-- Avatar -->
-            <!-- Avatar (Right) -->
-            <div
-              v-if="
-                msg.sender?.userId === 'unknown' ||
-                msg?.sender?.userId !== currentUser?.currenUserId
-              "
-              class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold text-white ml-2"
-              :class="
-                msg.sender === selectedChannelCurrent?.currenUserId
-                  ? 'bg-amber-400'
-                  : 'bg-gray-400'
-              "
-            >
-              {{
-                msg.sender?.nickname !== ""
-                  ? msg.sender?.nickname?.slice(0, 1)
-                  : msg.sender?.userId.slice(0, 1)
-              }}
-            </div>
             <!-- Message bubble -->
 
               <div
-                class="px-4 py-2 rounded-xl text-sm max-w-[70%]"
-              :class="[
-                msg?.sender?.userId === selectedChannelCurrent?.currenUserId
-                  ? 'bg-sky-200 text-sky-900'
-                  : 'bg-white text-gray-900 shadow',
-                !isImage(msg) && !isPdf(msg) && !isOtherFile(msg) ? 'shadow' : ''
-              ]"
+                :class="[
+                  // First message gets a larger card style and border
+                  idx === 0
+                    ? (msg?.sender?.userId === selectedChannelCurrent?.currenUserId
+                        ? 'px-6 py-4 rounded-[12px] max-w-[85%] bg-sky-200 text-sky-900 border border-sky-200 shadow-md'
+                        : 'px-6 py-4 rounded-[12px] max-w-[85%] bg-white text-gray-900 border border-gray-200 shadow-md')
+                    // Other messages are pill-like
+                    : (msg?.sender?.userId === selectedChannelCurrent?.currenUserId
+                        ? 'px-4 py-2 gap-2 flex rounded-full max-w-[70%] bg-sky-200 text-sky-900'
+                        : 'px-4 py-2 gap-2 flex rounded-full max-w-[70%] bg-white text-gray-900 shadow'),
+                  // keep the shadow only for non-file text messages
+                  !isImage(msg) && !isPdf(msg) && !isOtherFile(msg) && idx !== 0 ? 'shadow' : ''
+                ]"
             >
-              <p class="flex pb-1 text-gray-400">
-                {{ msg.sender?.nickname ?? msg.sender?.userId }}
-              </p>
-              <div v-if="isImage(msg)">
-                <img :src="msg.url" class="max-w-[200px] rounded" />
-              </div>
-
-              <template v-else-if="isPdf(msg)">
-                <a
-                  :href="(msg as any).url"
-                  target="_blank"
-                  class="text-blue-500 underline"
-                >
-                  📄 PDF file - Download
-                </a>
-              </template>
-
-              <template v-else-if="isOtherFile(msg)">
-                <a :href="(msg as any).url" target="_blank" class="text-blue-500">
-                  📎 {{ (msg as any).name || "Download file" }}
-                </a>
-              </template>
-              <div v-else>
+              
+              <div class="flex">
                 <!-- booking card: detect if message contains booking code (#digits) and 'Phòng' keyword -->
                 <template v-if="isBookingMessage(msg)">
                   <div class="bg-gray-50 rounded-md p-3 border border-gray-200">
@@ -248,7 +209,7 @@
                 </p>
               </div>
               <p
-                class="text-xs text-gray-500 mt-1"
+                class="text-xs text-gray-500 mt-1 flex gap-1"
                 style="line-break: anywhere"
                 :class="
                   msg?.sender?.userId === currentUser.currenUserId
@@ -262,11 +223,29 @@
                     minute: "2-digit",
                   })
                 }}
+                <img
+                  v-if="msg?.sender?.userId === currentUser.currenUserId && isMessageRead(msg, selectedChannelCurrent)"
+                  width="12"
+                  height="12"
+                  :src="checkIcon"
+                  
+                  alt=""
+                />
               </p>
             </div>
           </div>
           <div ref="bottomAnchor"></div>
           <!-- điểm cuộn tới -->
+        </div>
+      </div>
+      <!-- Typing indicator (other user) -->
+      <div
+        v-if="isOtherTyping(selectedChannelCurrent?.url)"
+        class="absolute left-6 bottom-14 z-20"
+      >
+        <div class="bg-white rounded-lg px-3 py-2 border border-gray-200 shadow-sm flex items-center gap-1 text-xs text-gray-700">
+          <img width="24" height="24" src="@/assets/typing.svg" alt="">
+          <div>Đang nhập tin nhắn...</div>
         </div>
       </div>
       <!-- Input -->
@@ -275,6 +254,8 @@
           <div class="flex items-center border border-blue-300 rounded-full px-4 py-2 bg-white w-full shadow-sm">
             <input
               v-model="message"
+              @input="onUserTyping"
+              @blur="onUserStoppedTyping"
               type="text"
               :disabled="isPendingChat"
               placeholder="Nhập tin nhắn..."
@@ -296,7 +277,7 @@
               <img
                 width="30"
                 height="30"
-                src="@/assets/choosefile.png"
+                :src="choosefileIcon"
                 alt=""
               />
             </button> -->
@@ -309,7 +290,7 @@
                 width="16"
                 height="16"
                 class="hover:scale-110 transition-transform cursor-pointer"
-                src="@/assets/send.svg"
+                :src="sendIcon"
                 alt=""
               />
             </div>
@@ -317,7 +298,7 @@
               v-else
               width="30"
               height="30"
-              src="@/assets/loading_2.gif"
+              :src="loadingGif"
               alt=""
             />
           </div>
@@ -334,6 +315,7 @@ import { useRoute, useRouter } from "vue-router";
 import {
   connectSendbird,
   createOrGet1on1Channel,
+  endTyping,
   getAndOpenChannel,
   // registerMessageListener ,
   initSendbird,
@@ -346,7 +328,13 @@ import {
   sendFileMessage,
   sendFileSuccess,
   sendMessageListener,
+  startTyping
 } from "../lib/sendbirdClient";
+
+const sendIcon = new URL('../assets/send.svg', import.meta.url).href;
+const checkIcon = new URL('../assets/check.svg', import.meta.url).href;
+const choosefileIcon = new URL('../assets/choosefile.png', import.meta.url).href;
+const loadingGif = new URL('../assets/loading_2.gif', import.meta.url).href;
 
 const channelList = ref<any>([]);
 const sortedChannelList = ref<any>([]);
@@ -436,11 +424,26 @@ const changeChannel = async (channel: any, shouldUpdateUrl = true) => {
   // Open channel and load messages
   await openChannel();
   scrollToBottom();
+  // clear typing UI for this channel when user opens it
+  try { delete typingState.value[channel.url]; } catch (e) {}
 };
 
 const message = ref("");
 const messages = ref<any[]>([]);
+// track typing state per channel
+const typingState = ref<Record<string, { users: string[]; expiresAt?: number }>>({});
+const isOtherTyping = (channelUrl: string | undefined | null) => {
+  if (!channelUrl) return false;
+  const entry = typingState.value[channelUrl];
+  if (!entry) return false;
+  if (entry.expiresAt && Date.now() > entry.expiresAt) {
+    delete typingState.value[channelUrl];
+    return false;
+  }
+  return (entry.users || []).filter(u => u !== currentUser.value.currenUserId).length > 0;
+};
 const keyReload = ref(0);
+let _typingTimeout: any = null;
 const connected = ref(false);
 const channelReady = ref(false);
 const channelName = ref("");
@@ -472,20 +475,82 @@ const getChannelDisplayName = (channel: any) => {
   return other?.nickname || other?.userId || channel.url || "Unknown";
 };
 
-const getChannelAvatar = (channel: any) => {
-  if (!channel) return "";
-  // If the conversation is in 'hotel' mode (not user), show hotel avatar
-  if (userChat.value.isUser === false) {
-    return hotelAvatar;
-  } else {
-    if (userChat.value.isGender === "male") {
-      return profileMale;
-    } else if (userChat.value.isGender === "female") {
-      return profileFemale;
-    } else {
-      return profileNone;
+const getChannelAvatar = (channel?: any): string => {
+  // Prefer per-channel member profile if available
+  const ch = channel || selectedChannelCurrent.value;
+  if (ch?.members && Array.isArray(ch.members)) {
+    const other = ch.members.find((m: any) => m.userId !== currentUser.value.currenUserId);
+    if (other) {
+      // common Sendbird field: profileUrl
+      if (other.profileUrl) return other.profileUrl;
+      // some SDKs or custom member shapes may use 'profile' or 'avatar'
+      if (other.profile) return other.profile;
+      if (other.avatar) return other.avatar;
     }
   }
+  // Fall back to hotel or user-level profile based on userChat flags
+  if (userChat.value && userChat.value.isUser === false) {
+    return hotelAvatar;
+  }
+  if (userChat.value?.isGender === "male") return profileMale;
+  if (userChat.value?.isGender === "female") return profileFemale;
+  return profileNone;
+};
+
+// Determine if a message sent by current user is read by the other member
+const isMessageRead = (msg: any, channel: any) => {
+  if (!msg || !channel) return false;
+  if (msg.sender?.userId !== currentUser.value.currenUserId) return false;
+  // Find other member
+  const other = channel.members?.find((m: any) => m.userId !== currentUser.value.currenUserId);
+  if (!other) return false;
+  // Debug logging to help track read fields
+  try {
+    console.debug('isMessageRead check', { msgId: msg?.messageId || msg?.message, createdAt: msg?.createdAt, other });
+  } catch (e) {
+    // ignore
+  }
+  // Try common last seen fields
+  const seenFields = [
+    other.lastSeenAt,
+    other.last_seen_at,
+    other.lastReadAt,
+    other.last_read_at,
+    other.lastSeen,
+    other.last_seen,
+  ];
+  for (const f of seenFields) {
+    if (typeof f === 'number' && f >= msg.createdAt) return true;
+  }
+  // Check if channel has lastSeenAt or lastReadAt for the user
+  const chMember = channel.members?.find((m: any) => m.userId === other?.userId);
+  if (chMember) {
+    if (typeof chMember.lastSeenAt === 'number' && chMember.lastSeenAt >= msg.createdAt) return true;
+    if (typeof chMember.lastReadAt === 'number' && chMember.lastReadAt >= msg.createdAt) return true;
+  }
+  // General heuristic: scan fields for read/seen timestamps on the member object
+  try {
+    for (const [k, v] of Object.entries(other || {})) {
+      const key = String(k).toLowerCase();
+      if ((key.includes('read') || key.includes('seen')) && typeof v === 'number' && v >= msg.createdAt) {
+        return true;
+      }
+    }
+  } catch (e) { /* ignore */ }
+  // Also scan the channel for read/seen timestamp fields that might refer to the other
+  try {
+    for (const [k, v] of Object.entries(channel || {})) {
+      const key = String(k).toLowerCase();
+      if ((key.includes('read') || key.includes('seen')) && typeof v === 'number' && v >= msg.createdAt) {
+        return true;
+      }
+    }
+  } catch (e) { /* ignore */ }
+  // Fallback heuristic: if this message is the channel's lastMessage and channel.unreadMessageCount is 0, assume read.
+  if (channel.lastMessage && channel.lastMessage.createdAt === msg.createdAt && (channel.unreadMessageCount === 0 || channel.unreadMessageCount === undefined)) {
+    return true;
+  }
+  return false;
 };
 
 const connectToUser = async (userId: string) => {
@@ -538,6 +603,7 @@ const openChannel = async () => {
       selectedChannelCurrent.value,
       paramsUser
     );
+    console.log('channelInfo :>> ', channelInfo);
     channelName.value = channelInfo.name;
     channelUrlCurren.value = channelInfo.channelUrl;
     const oldMsgs = await loadMessages();
@@ -598,6 +664,26 @@ const sendMessageToChannel = async () => {
   } catch (err) {
     console.error(" Gửi lỗi:", err);
   }
+};
+
+const onUserTyping = () => {
+  // Notify Sendbird that we are typing, and debounce endTyping
+  try {
+    startTyping();
+  } catch (e) {}
+  if (_typingTimeout) clearTimeout(_typingTimeout);
+  _typingTimeout = setTimeout(() => {
+    try { endTyping(); } catch (e) {}
+    _typingTimeout = null;
+  }, 2500);
+};
+
+const onUserStoppedTyping = () => {
+  if (_typingTimeout) {
+    clearTimeout(_typingTimeout);
+    _typingTimeout = null;
+  }
+  try { endTyping(); } catch (e) {}
 };
 const getAllChannelForUserid = async () => {
   const result = await createOrGet1on1Channel(
@@ -687,9 +773,13 @@ const getAllChannelForUserid = async () => {
       try {
         const channelUrl = channel.url;
         // Find in list
-        const idx = channelList.value.findIndex(
-          (c: any) => c.url === channelUrl
-        );
+        const idx = channelList.value.findIndex((c: any) => c.url === channelUrl);
+        // If the channel is currently open, reload messages
+        if (selectedChannelCurrent.value && channel.url === selectedChannelCurrent.value.url) {
+          const oldMsgs = await loadMessages();
+          messages.value = oldMsgs.reverse();
+          keyReload.value += 1;
+        }
         if (idx >= 0) {
           // Update last message preview and unread count
           channelList.value[idx].lastMessage = message || channel.lastMessage;
@@ -716,6 +806,100 @@ const getAllChannelForUserid = async () => {
         }
       } catch (err) {
         console.warn("Inbox update failed", err);
+      }
+    },
+    async (channel) => {
+      // Channel changed callback
+      try {
+        if (selectedChannelCurrent.value && channel.url === selectedChannelCurrent.value.url) {
+          const oldMsgs = await loadMessages();
+          messages.value = oldMsgs.reverse();
+          keyReload.value += 1;
+        }
+        // Update channel preview in the channel list
+        const idx = channelList.value.findIndex((c: any) => c.url === channel.url);
+        if (idx >= 0) {
+          channelList.value[idx] = { ...channelList.value[idx], ...channel };
+          if (!channelList.value[idx].name) channelList.value[idx].name = getChannelDisplayName(channelList.value[idx]);
+        }
+      } catch (err) {
+        console.warn('channelChanged handler error', err);
+      }
+    },
+    async (channel, reader) => {
+      // Read receipt or reader info updated
+      try {
+        console.debug('Read receipt updated:', { channelUrl: channel?.url, reader });
+        if (selectedChannelCurrent.value && channel.url === selectedChannelCurrent.value.url) {
+          // If reader object is passed, try to update the local member info to avoid a fetch
+          try {
+            if (reader && reader.userId) {
+              const idx = selectedChannelCurrent.value.members?.findIndex((m: any) => m.userId === reader.userId);
+              if (typeof idx === 'number' && idx >= 0) {
+                selectedChannelCurrent.value.members[idx] = {
+                  ...selectedChannelCurrent.value.members[idx],
+                  ...reader,
+                };
+              }
+            }
+          } catch (e) {
+            // ignore
+          }
+          // In all cases, reload messages so UI updates
+          const oldMsgs = await loadMessages();
+          messages.value = oldMsgs.reverse();
+          keyReload.value += 1;
+        }
+        // update channelList member info for readers if present
+        try {
+          const idxCh = channelList.value.findIndex((c: any) => c.url === channel.url);
+          if (idxCh >= 0 && reader && reader.userId) {
+            const userIdx = channelList.value[idxCh].members?.findIndex((m: any) => m.userId === reader.userId);
+            if (typeof userIdx === 'number' && userIdx >= 0) {
+              channelList.value[idxCh].members[userIdx] = { ...channelList.value[idxCh].members[userIdx], ...reader };
+            }
+          }
+        } catch (e) { /* ignore */ }
+        const idx = channelList.value.findIndex((c: any) => c.url === channel.url);
+        if (idx >= 0) {
+          channelList.value[idx] = { ...channelList.value[idx], ...channel };
+        }
+      } catch (error) {
+        console.error('Error updating read receipts:', error);
+      }
+    }
+    ,
+    async (channel, typingUsers) => {
+      try {
+        if (!channel || !channel.url) return;
+        // If `typingUsers` provided, extract userIds; otherwise, attempt to derive
+        let users: string[] = [];
+        if (Array.isArray(typingUsers) && typingUsers.length) {
+          users = typingUsers.map(u => u?.userId || u?.user_id || u?.id).filter(Boolean);
+          users = users.filter(u => u !== currentUser.value.currenUserId);
+        } else {
+          // derive from channel members: those with any isTyping-like property
+          try {
+            users = channel.members?.filter((m:any) => m.userId !== currentUser.value.currenUserId && (m.isTyping || m.is_typing || m.typing || false)).map((m:any) => m.userId) || [];
+          } catch (e) { users = []; }
+        }
+        // set typing state for channel, expire in 3500ms
+        if (users.length === 0) {
+          delete typingState.value[channel.url];
+        } else {
+          typingState.value[channel.url] = {
+            users,
+            expiresAt: Date.now() + 3500
+          };
+        }
+        // refresh UI if current channel
+        if (selectedChannelCurrent.value && selectedChannelCurrent.value.url === channel.url) {
+          // ensure messages reload may not be needed; just update channelList UI
+          // Force reactive update
+          keyReload.value += 1;
+        }
+      } catch (err) {
+        console.warn('typing update handler error', err);
       }
     }
   );
@@ -804,15 +988,7 @@ onMounted(async () => {
     await getAllChannelForUserid();
   }, 500);
   listenToNewChannels(onNewMessage, onNewChannel);
-  // registerMessageListener((channel, message) => {
-  //   unreadChannelUrls.value.push(channel.url);
-  //   console.log('unreadChannelUrls.value :>> ', unreadChannelUrls.value);
-  //   if (message.isUserMessage?.()) {
-  //     console.log('message component :>> ', message);
-  //   } else if (message.isFileMessage?.()) {
 
-  //   }
-  // })
 });
 const bottomAnchor = ref<HTMLElement | null>(null);
 const messagesContainer = ref<HTMLElement | null>(null);

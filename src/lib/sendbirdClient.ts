@@ -151,10 +151,16 @@ export async function loadMessages(limit = 50) {
 let messageHandlerRegistered = false
 let reloadMessagesCallback: (() => Promise<void>) | null = null
 let inboxUpdateCallback: ((channel: any, message: BaseMessage) => Promise<void> | void) | null = null
+let channelChangedCallback: ((channel: any) => Promise<void> | void) | null = null
+let readReceiptCallback: ((channel: any, reader?: any) => Promise<void> | void) | null = null
+let typingCallback: ((channel: any, typingUsers?: any[]) => Promise<void> | void) | null = null
 
 export function registerMessageHandler(
   reloadCallback: () => Promise<void>,
-  onInboxUpdate?: (channel: any, message: BaseMessage) => Promise<void> | void
+  onInboxUpdate?: (channel: any, message: BaseMessage) => Promise<void> | void,
+  onChannelChanged?: (channel: any) => Promise<void> | void,
+  onReadReceiptUpdated?: (channel: any, reader?: any) => Promise<void> | void
+  , onTypingUpdated?: (channel: any, typingUsers?: any[]) => Promise<void> | void
 ) {
   // Chỉ đăng ký handler 1 lần
   if (messageHandlerRegistered) {
@@ -166,6 +172,9 @@ export function registerMessageHandler(
   
   reloadMessagesCallback = reloadCallback
   inboxUpdateCallback = onInboxUpdate ?? null
+  channelChangedCallback = onChannelChanged ?? null
+  readReceiptCallback = onReadReceiptUpdated ?? null
+  typingCallback = onTypingUpdated ?? null
   
   const handler = new GroupChannelHandler()
   handler.onMessageReceived = async (channel, message) => {
@@ -195,6 +204,77 @@ export function registerMessageHandler(
       await inboxUpdateCallback(channel, message)
     }
   }
+  handler.onChannelChanged = async (channel) => {
+    console.log('onChannelChanged - channel:', channel.url);
+    if (channelChangedCallback) {
+      try {
+        await channelChangedCallback(channel)
+      } catch (err) {
+        console.warn('channelChangedCallback error', err)
+      }
+    }
+  }
+  // @ts-ignore
+  handler.onUserEntered = async (channel: any, user: any) => {
+    console.log('onUserEntered - channel:', channel.url)
+    if (channelChangedCallback) {
+      try { await channelChangedCallback(channel) } catch (err) { console.warn('channelChangedCallback error', err) }
+    }
+  }
+  // @ts-ignore
+  handler.onUserExited = async (channel: any, user: any) => {
+    console.log('onUserExited - channel:', channel.url)
+    if (channelChangedCallback) {
+      try { await channelChangedCallback(channel) } catch (err) { console.warn('channelChangedCallback error', err) }
+    }
+  }
+  // @ts-ignore
+  handler.onUserJoined = async (channel: any, user: any) => {
+    console.log('onUserJoined - channel:', channel.url)
+    if (channelChangedCallback) {
+      try { await channelChangedCallback(channel) } catch (err) { console.warn('channelChangedCallback error', err) }
+    }
+  }
+  // @ts-ignore
+  handler.onUserLeft = async (channel: any, user: any) => {
+    console.log('onUserLeft - channel:', channel.url)
+    if (channelChangedCallback) {
+      try { await channelChangedCallback(channel) } catch (err) { console.warn('channelChangedCallback error', err) }
+    }
+  }
+
+  // Some SDKs expose onReadReceiptUpdated or similar; attempt to bind
+  // If method exists, it will be called when a read-receipt update occurs
+  // The handler signature may vary between versions; call our callback defensively
+  // @ts-ignore - event may or may not exist on GroupChannelHandler
+  handler.onReadReceiptUpdated = async (channel, reader) => {
+    console.log('onReadReceiptUpdated - channel:', channel.url)
+    if (readReceiptCallback) {
+      try {
+        await readReceiptCallback(channel, reader)
+      } catch (err) {
+        console.warn('readReceiptCallback error', err)
+      }
+    }
+  }
+  // @ts-ignore - typing status update may exist on SDK GroupChannelHandler
+  handler.onTypingStatusUpdated = async (channel) => {
+    // try to call callback with a list of typing members if available
+    if (typingCallback) {
+      try {
+        let typingMembers: any[] | undefined
+        try {
+          // SDK variation: channel.getTypingMembers() or channel.getTypingUsers()
+          typingMembers = (channel as any).getTypingMembers?.() || (channel as any).getTypingUsers?.() || (channel as any).typingMembers || undefined
+        } catch (e) {
+          typingMembers = undefined
+        }
+        await typingCallback(channel, typingMembers)
+      } catch (err) {
+        console.warn('typingCallback error', err)
+      }
+    }
+  }
   
   const handlerId = 'main-message-handler'
   sb.groupChannel.removeGroupChannelHandler(handlerId)
@@ -206,6 +286,36 @@ export function registerMessageHandler(
 export async function reloadMessagesNow() {
   if (reloadMessagesCallback) {
     await reloadMessagesCallback()
+  }
+}
+
+// Start typing signal for current channel
+export async function startTyping() {
+  if (!currentChannel.value) return;
+  try {
+    (currentChannel.value as any).startTyping?.()
+  } catch (err) {
+    console.warn('Failed startTyping', err)
+  }
+}
+
+// End typing signal for current channel
+export async function endTyping() {
+  if (!currentChannel.value) return;
+  try {
+    (currentChannel.value as any).endTyping?.()
+  } catch (err) {
+    console.warn('Failed endTyping', err)
+  }
+}
+
+// Fetch latest channel info (members/metadata) by URL
+export async function fetchChannelByUrl(channelUrl: string) {
+  try {
+    return await sb.groupChannel.getChannel(channelUrl)
+  } catch (err) {
+    console.warn('Failed to fetch channel by URL', err)
+    return null
   }
 }
 
