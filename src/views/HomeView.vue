@@ -156,7 +156,7 @@
       <!-- Messages -->
       <div
         ref="messagesContainer"
-        class="flex-1 px-6 py-6 space-y-6 overflow-y-auto overflow-x-hidden bg-white mb-24"
+        class="flex-1 px-6 py-6 space-y-6 overflow-y-auto overflow-x-hidden bg-[#F2F4F7] mb-24 "
       >
         <div class="">
           <div v-for="(msg, idx) in messages" :key="idx" class="w-full">
@@ -177,18 +177,19 @@
                 :class="[
                   // First message gets a larger card style and border
                   idx === 0
-                    ? (msg?.sender?.userId === selectedChannelCurrent?.currenUserId
-                        ? 'px-6 py-4 rounded-[12px] max-w-[85%] bg-sky-200 text-sky-900 border border-sky-200 shadow-md'
-                        : 'px-6 py-4 rounded-[12px] max-w-[85%] bg-white text-gray-900 border border-gray-200 shadow-md')
+                    ? (msg?.sender?.userId !== selectedChannelCurrent?.inviter?.userId
+                        ? 'px-6 py-4 rounded-[12px] relative max-w-[85%] bg-[#D1E9FF] text-sky-900 border border-sky-200 shadow-md'
+                        : 'px-6 py-4 rounded-[12px] relative max-w-[85%] bg-white text-gray-900 border border-gray-200 shadow-md')
                     // Other messages are pill-like
-                    : (msg?.sender?.userId === selectedChannelCurrent?.currenUserId
-                        ? 'px-4 py-2 gap-2 flex rounded-full max-w-[70%] bg-sky-200 text-sky-900'
-                        : 'px-4 py-2 gap-2 flex rounded-full max-w-[70%] bg-white text-gray-900 shadow'),
+                    : (msg?.sender?.userId !== selectedChannelCurrent?.inviter?.userId
+                        ? 'px-4 py-2 gap-2 flex rounded-[12px] relative max-w-[70%] bg-[#D1E9FF] text-sky-900'
+                        : 'px-4 py-2 gap-2 flex rounded-[12px] relative max-w-[70%] bg-white text-gray-900 shadow'),
                   // keep the shadow only for non-file text messages
                   !isImage(msg) && !isPdf(msg) && !isOtherFile(msg) && idx !== 0 ? 'shadow' : ''
                 ]"
             >
-              
+              <img class="absolute top-0 -left-[6px]" v-if="(msg?.sender?.userId === selectedChannelCurrent?.inviter?.userId)" src="@/assets/pubble-user.svg" alt="">
+              <img class="absolute top-0 -right-[6px]" v-else src="@/assets/pubble.svg" alt="">
               <div class="flex">
                 <!-- booking card: detect if message contains booking code (#digits) and 'Phòng' keyword -->
                 <template v-if="isBookingMessage(msg)">
@@ -393,6 +394,7 @@ const updateRouterQuery = (channel: any) => {
   });
 };
 const changeChannel = async (channel: any, shouldUpdateUrl = true) => {
+  console.log('channel :>> ', channel);
   selectedChannelCurrent.value = channel;
   // Mark channel as read when user opens it
   try {
